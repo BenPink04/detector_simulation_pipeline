@@ -241,7 +241,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         if (kaon_p > 11) continue;
         if (found_truth && true_p_mag != 0) {
             // Print as soon as the event is processed
-            std::cout << "Event " << event_number
+            // std::cout << "Event " << event_number
                       << " | Reco p: " << kaon_p
                       << " | True p: " << true_p_mag
                       << " | Reco vertex: (" << decay_vertex.X() << ", " << decay_vertex.Y() << ", " << decay_vertex.Z() << ")"
