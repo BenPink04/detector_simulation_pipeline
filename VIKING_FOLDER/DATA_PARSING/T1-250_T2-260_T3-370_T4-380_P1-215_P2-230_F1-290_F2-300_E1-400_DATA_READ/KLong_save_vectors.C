@@ -243,7 +243,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
             // Print as soon as the event is processed
             std::cout << "Event " << event_number
                       << " | Reco p: " << kaon_p
-                      << " | True p: " << true_p_mag
+// << " | True p: " << true_p_mag
                       << " | Reco vertex: (" << decay_vertex.X() << ", " << decay_vertex.Y() << ", " << decay_vertex.Z() << ")"
                       << " | True vertex: (" << true_vertex_vec.X() << ", " << true_vertex_vec.Y() << ", " << true_vertex_vec.Z() << ")"
                       << std::endl;

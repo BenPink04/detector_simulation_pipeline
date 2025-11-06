@@ -252,7 +252,7 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
 
         // Print event info
         std::cout << "Selected Event #" << event_counter
-                  << " | True p: " << true_p_mag;
+// << " | True p: " << true_p_mag;
         if (reconstructable) {
             std::cout << " | Reco p: " << kaon_p << std::endl;
             reco_p.push_back(kaon_p);

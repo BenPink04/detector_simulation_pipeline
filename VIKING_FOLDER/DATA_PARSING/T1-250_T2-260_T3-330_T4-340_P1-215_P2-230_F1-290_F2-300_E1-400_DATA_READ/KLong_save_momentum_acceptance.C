@@ -251,16 +251,15 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
         }
 
         // Print event info
-        std::cout << "Selected Event #" << event_counter
-                  << " | True p: " << true_p_mag;
+        // std::cout << "Selected Event #" << event_counter << " | True p: " << true_p_mag;
         if (reconstructable) {
-            std::cout << " | Reco p: " << kaon_p << std::endl;
+            // std::cout << " | Reco p: " << kaon_p << std::endl;
             reco_p.push_back(kaon_p);
             true_p.push_back(true_p_mag);
             reco_vertex.push_back(decay_vertex);
             true_vertex.push_back(true_vertex_vec);
         } else {
-            std::cout << " | Reco p: not reconstructable" << std::endl;
+            // std::cout << " | Reco p: not reconstructable" << std::endl;
         }
 
         // Always add true momentum
