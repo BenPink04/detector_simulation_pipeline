@@ -1,0 +1,63 @@
+# Build artifacts and compiled files
+*.o
+*.so
+*.a
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.make
+*.marks
+*.cmake
+*.bin
+a.out
+
+# ROOT files (data)
+*.root
+
+# SLURM job outputs
+*.log
+*.err
+
+# Temporary and backup files
+*.backup
+*.tmp
+*~
+.#*
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Generated executables
+jlabk
+jlabk_*
+
+# Simulation results (large data files)
+VIKING_FOLDER/SIMULATION_RESULTS/
+VIKING_FOLDER/DATA_PARSING/*/out_*.root
+
+# Job script temporary directories
+JOBSCRIPTS_TESTS/temp_jobs/
+
+# Dependency files
+*.d
+*.depend*
+*.internal
+*.ts
+
+# Progress and hash files
+*RuleHashes.txt
+progress.marks
+*DirectoryInformation.cmake
+*ConfigureLog.yaml
+check_cache
+
+# Compiler identification
+CompilerId*/
+
+# Build logs
+build.log
