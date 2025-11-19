@@ -1,197 +1,115 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=TestHistogramPlotting
+#SBATCH --job-name=TestHistogramData
 #SBATCH --partition=nodes
-#SBATCH --time=0-00:10:00
+#SBATCH --time=0-00:05:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=1G
+#SBATCH --mem=2G
 #SBATCH --account=pet-hadron-2019
 #SBATCH --output=%x-%j.log
 #SBATCH --error=%x-%j.err
 
 set -e
 
-echo "=== Testing if parsed data produces non-empty histograms ==="
-echo "Started at: $(date)"
-
-# Load required modules
-module purge
 module load ROOT/6.30.06-foss-2023a
 
-# We need to check if acceptance and vectors files were created from the test
-TEST_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/TEST_T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400"
-cd "$TEST_DIR"
+echo "Testing histogram creation with combined vectors data..."
 
-echo "Looking for parsed output files in: $TEST_DIR"
-ls -la
+# Test file path
+TEST_FILE="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_combined_vectors.root"
 
-# Check if we have acceptance files that would be created by the parsing
-ACCEPTANCE_FILES=$(find . -name "*_acceptance.root" | head -1)
-VECTORS_FILES=$(find . -name "*_vectors.root" | head -1)
+echo "Using test file: $TEST_FILE"
 
-if [ -z "$ACCEPTANCE_FILES" ]; then
-    echo "No acceptance files found. The test parsing may not have completed successfully."
-    echo "Available files:"
-    ls -la
+# Check if file exists and get basic info
+if [ -f "$TEST_FILE" ]; then
+    echo "✅ File exists"
+    FILESIZE=$(stat -c%s "$TEST_FILE" 2>/dev/null)
+    echo "File size: $FILESIZE bytes"
     
-    # Check the main copied file to see what type it is
-    MAIN_FILE=$(find . -name "*.root" | head -1)
-    if [ -n "$MAIN_FILE" ]; then
-        echo "Checking main file: $MAIN_FILE"
-        root -l -b -q << EOF
-TFile *f = TFile::Open("$MAIN_FILE");
-if(f && !f->IsZombie()) {
-    cout << "File contents:" << endl;
-    f->ls();
-    
-    // Check if this is raw simulation data or parsed data
-    TTree *ntuple1 = (TTree*)f->Get("Ntuple1");
-    TTree *kaonEventInfo = (TTree*)f->Get("kaonEventInfo");
-    TTree *kaonVectors = (TTree*)f->Get("kaonVectors");
-    
-    if(ntuple1) cout << "This is RAW simulation data (Ntuple1 found)" << endl;
-    if(kaonEventInfo) cout << "This has ACCEPTANCE data (kaonEventInfo found)" << endl;
-    if(kaonVectors) cout << "This has VECTORS data (kaonVectors found)" << endl;
-    
-    f->Close();
-}
-EOF
-    fi
-else
-    echo "Found acceptance file: $ACCEPTANCE_FILES"
-    
-    # Test if acceptance data would create non-empty histogram
-    root -l -b -q << EOF
-TFile *file = TFile::Open("$ACCEPTANCE_FILES");
-if(!file || file->IsZombie()) {
-    cout << "ERROR: Could not open acceptance file!" << endl;
-    return;
-}
-
-TTree *tree = (TTree*)file->Get("kaonEventInfo");
-if(!tree) {
-    cout << "ERROR: kaonEventInfo tree not found!" << endl;
-    file->Close();
-    return;
-}
-
-// Simulate the acceptance plotting logic
-vector<double> *true_mom_vec = nullptr;
-vector<int> *reco_flag_vec = nullptr;
-int n_triple_pion_events = 0;
-tree->SetBranchAddress("true_mom_vec", &true_mom_vec);
-tree->SetBranchAddress("reco_flag_vec", &reco_flag_vec);
-tree->SetBranchAddress("n_triple_pion_events", &n_triple_pion_events);
-
-tree->GetEntry(0);
-
-cout << "Acceptance data summary:" << endl;
-cout << "  Triple pion events: " << n_triple_pion_events << endl;
-cout << "  True momentum vector size: " << (true_mom_vec ? true_mom_vec->size() : 0) << endl;
-cout << "  Reco flag vector size: " << (reco_flag_vec ? reco_flag_vec->size() : 0) << endl;
-
-if(true_mom_vec && reco_flag_vec && true_mom_vec->size() > 0) {
-    // Test histogram binning like the acceptance macro does
-    double p_min = 0.0, p_max = 10.0, bin_width = 0.5;
-    int n_bins = int((p_max - p_min) / bin_width);
-    
-    vector<int> reco_in_bin(n_bins, 0);
-    vector<int> total_in_bin(n_bins, 0);
-    
-    for(int i = 0; i < n_triple_pion_events; ++i) {
-        double p = (*true_mom_vec)[i];
-        int bin = int((p - p_min) / bin_width);
-        if(bin >= 0 && bin < n_bins) {
-            total_in_bin[bin]++;
-            if((*reco_flag_vec)[i]) reco_in_bin[bin]++;
+    # Quick ROOT inspection
+    echo "Inspecting ROOT file contents..."
+    root -l -b -q -e "
+        TFile* f = TFile::Open(\"$TEST_FILE\");
+        if (!f || f->IsZombie()) {
+            cout << \"❌ Cannot open file!\" << endl;
+            exit(1);
         }
-    }
-    
-    int non_empty_bins = 0;
-    int total_reconstructed = 0;
-    for(int bin = 0; bin < n_bins; ++bin) {
-        if(total_in_bin[bin] > 0) {
-            non_empty_bins++;
-            total_reconstructed += reco_in_bin[bin];
+        
+        f->ls();
+        
+        TTree* tree = (TTree*)f->Get(\"kaonVectors\");
+        if (!tree) {
+            cout << \"❌ Tree 'kaonVectors' not found!\" << endl;
+            f->Close();
+            exit(1);
         }
-    }
-    
-    cout << "Histogram would have:" << endl;
-    cout << "  Non-empty bins: " << non_empty_bins << " / " << n_bins << endl;
-    cout << "  Total reconstructed: " << total_reconstructed << " / " << n_triple_pion_events << endl;
-    cout << "  Acceptance rate: " << (100.0*total_reconstructed/n_triple_pion_events) << "%" << endl;
-    
-    if(non_empty_bins > 0) {
-        cout << "✓ ACCEPTANCE HISTOGRAM WILL HAVE DATA!" << endl;
-    } else {
-        cout << "✗ Acceptance histogram would be empty!" << endl;
-    }
-} else {
-    cout << "✗ No valid acceptance data found!" << endl;
-}
-
-file->Close();
-EOF
-fi
-
-if [ -n "$VECTORS_FILES" ]; then
-    echo "Found vectors file: $VECTORS_FILES"
-    
-    # Test if vectors data would create non-empty histogram  
-    root -l -b -q << EOF
-TFile *file = TFile::Open("$VECTORS_FILES");
-if(!file || file->IsZombie()) {
-    cout << "ERROR: Could not open vectors file!" << endl;
-    return;
-}
-
-TTree *tree = (TTree*)file->Get("kaonVectors");
-if(!tree) {
-    cout << "ERROR: kaonVectors tree not found!" << endl;
-    file->Close();
-    return;
-}
-
-// Simulate the resolution plotting logic
-vector<double> *reco_p = nullptr;
-vector<double> *true_p = nullptr;
-tree->SetBranchAddress("reco_p", &reco_p);
-tree->SetBranchAddress("true_p", &true_p);
-
-tree->GetEntry(0);
-
-cout << "Vectors data summary:" << endl;
-cout << "  Reco momentum vector size: " << (reco_p ? reco_p->size() : 0) << endl;
-cout << "  True momentum vector size: " << (true_p ? true_p->size() : 0) << endl;
-
-if(reco_p && true_p && reco_p->size() > 0) {
-    int valid_pairs = 0;
-    double total_resolution = 0;
-    
-    for(size_t i = 0; i < reco_p->size(); ++i) {
-        if((*true_p)[i] > 0) {
-            double res = abs(((*reco_p)[i] - (*true_p)[i]) / (*true_p)[i]);
-            if(res < 1.0) { // Skip anomalous results like the macro does
-                valid_pairs++;
-                total_resolution += res;
+        
+        cout << \"✅ Tree found with \" << tree->GetEntries() << \" entries\" << endl;
+        tree->Print();
+        
+        // Check if branches exist
+        if (tree->GetBranch(\"reco_p\") && tree->GetBranch(\"true_p\")) {
+            cout << \"✅ Required branches 'reco_p' and 'true_p' found\" << endl;
+            
+            // Get first entry to check data
+            std::vector<double>* reco_p = nullptr;
+            std::vector<double>* true_p = nullptr;
+            tree->SetBranchAddress(\"reco_p\", &reco_p);
+            tree->SetBranchAddress(\"true_p\", &true_p);
+            
+            if (tree->GetEntries() > 0) {
+                tree->GetEntry(0);
+                if (reco_p && true_p) {
+                    cout << \"✅ Data vectors loaded successfully\" << endl;
+                    cout << \"   Number of reco_p values: \" << reco_p->size() << endl;
+                    cout << \"   Number of true_p values: \" << true_p->size() << endl;
+                    
+                    if (reco_p->size() > 0 && true_p->size() > 0) {
+                        cout << \"   Sample reco_p[0]: \" << (*reco_p)[0] << \" GeV/c\" << endl;
+                        cout << \"   Sample true_p[0]: \" << (*true_p)[0] << \" GeV/c\" << endl;
+                        cout << \"✅ Data looks valid for histogram creation!\" << endl;
+                    } else {
+                        cout << \"❌ Data vectors are empty!\" << endl;
+                    }
+                } else {
+                    cout << \"❌ Failed to load data vectors!\" << endl;
+                }
+            } else {
+                cout << \"❌ No entries in tree!\" << endl;
             }
+        } else {
+            cout << \"❌ Required branches not found!\" << endl;
         }
-    }
+        
+        f->Close();
+    "
     
-    cout << "Resolution data:" << endl;
-    cout << "  Valid momentum pairs: " << valid_pairs << " / " << reco_p->size() << endl;
-    if(valid_pairs > 0) {
-        cout << "  Average resolution: " << (total_resolution/valid_pairs) << endl;
-        cout << "✓ RESOLUTION HISTOGRAM WILL HAVE DATA!" << endl;
-    } else {
-        cout << "✗ Resolution histogram would be empty!" << endl;
-    }
-} else {
-    cout << "✗ No valid vectors data found!" << endl;
-}
-
-file->Close();
-EOF
+    echo ""
+    echo "Now testing histogram creation script..."
+    
+    cd /users/bp969/scratch/VIKING_FOLDER/HISTOGRAM_MAKING
+    
+    # Copy the resolution script and modify it for our test file
+    cp KLong_plot_resolution_histbar.C test_resolution_histbar.C
+    
+    # Update the file path in the script
+    sed -i "s|/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_combined_vectors.root|$TEST_FILE|g" test_resolution_histbar.C
+    
+    echo "Running histogram creation script..."
+    root -l -b -q "test_resolution_histbar.C()"
+    
+    if [ -f "KLong_histbar_plot.png" ]; then
+        echo "✅ SUCCESS: Histogram created successfully!"
+        echo "Plot saved as: $(pwd)/KLong_histbar_plot.png"
+        ls -la KLong_histbar_plot.png
+    else
+        echo "❌ FAILED: No histogram plot created"
+    fi
+    
+    # Cleanup
+    rm -f test_resolution_histbar.C
+    
+else
+    echo "❌ Test file does not exist: $TEST_FILE"
+    exit 1
 fi
-
-echo "=== Test completed at: $(date) ==="

@@ -9,7 +9,7 @@
 
 void KLong_plot_resolution_histbar() {
     std::vector<std::string> filenames = {
-    "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_combined_vectors.root"
+    "/users/bp969/scratch/VIKING_FOLDER/PIPELINE_RESULTS/T1-240_T2-250_T3-280_T4-290_P1-215_P2-230_F1-260_F2-270_E1-600/T1-240_T2-250_T3-280_T4-290_P1-215_P2-230_F1-260_F2-270_E1-600_combined_vectors.root"
     };
 
     int nbins = 40;

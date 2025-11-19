@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=TestFixedVectors
+#SBATCH --partition=nodes
+#SBATCH --time=0-00:05:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=2G
+#SBATCH --account=pet-hadron-2019
+#SBATCH --output=%x-%j.log
+#SBATCH --error=%x-%j.err
+
+set -e
+
+module load ROOT/6.30.06-foss-2023a
+
+echo "Testing fixed vectors parsing script..."
+
+cd /users/bp969/scratch/VIKING_FOLDER/DATA_PARSING
+
+TEST_FILE="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_1.root"
+
+echo "Running fixed vectors parsing script..."
+root -l -b -q "KLong_save_vectors_fixed.C(\"$TEST_FILE\")"
+
+EXPECTED_OUTPUT="T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_1_vectors.root"
+
+if [ -f "$EXPECTED_OUTPUT" ]; then
+    echo "✅ SUCCESS: Fixed vectors output created!"
+    
+    # Check the content
+    root -l -b -q -e "
+        TFile* f = TFile::Open(\"$EXPECTED_OUTPUT\");
+        TTree* t = (TTree*)f->Get(\"kaonVectors\");
+        if (t) {
+            cout << \"Tree entries: \" << t->GetEntries() << endl;
+            t->Print();
+            
+            if (t->GetEntries() > 0) {
+                std::vector<double>* reco_p = nullptr;
+                std::vector<double>* true_p = nullptr;
+                t->SetBranchAddress(\"reco_p\", &reco_p);
+                t->SetBranchAddress(\"true_p\", &true_p);
+                t->GetEntry(0);
+                cout << \"✅ Number of reco_p values: \" << reco_p->size() << endl;
+                cout << \"✅ Number of true_p values: \" << true_p->size() << endl;
+                
+                if (reco_p->size() > 0) {
+                    cout << \"Sample data:\" << endl;
+                    for (int i = 0; i < min(5, (int)reco_p->size()); i++) {
+                        cout << \"  \" << i << \": reco=\" << (*reco_p)[i] << \", true=\" << (*true_p)[i] << endl;
+                    }
+                }
+            }
+        }
+        f->Close();
+    "
+    
+    # Clean up
+    rm -f "$EXPECTED_OUTPUT"
+else
+    echo "❌ No vectors output file created"
+fi

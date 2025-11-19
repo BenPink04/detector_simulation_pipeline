@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=TestFixedVectorsQuick
+#SBATCH --partition=nodes
+#SBATCH --time=0-00:05:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=2G
+#SBATCH --account=pet-hadron-2019
+#SBATCH --output=%x-%j.log
+#SBATCH --error=%x-%j.err
+
+set -e
+
+module load ROOT/6.30.06-foss-2023a
+
+echo "Quick test of fixed vectors parsing..."
+
+cd /users/bp969/scratch/VIKING_FOLDER/DATA_PARSING
+
+TEST_FILE="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_1.root"
+
+echo "Running fixed vectors parsing on: $TEST_FILE"
+
+# Run with timeout to avoid hanging
+timeout 300 root -l -b -q "KLong_save_vectors.C(\"$TEST_FILE\")" || echo "Parsing timed out or failed"
+
+EXPECTED_OUTPUT="T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_1_vectors.root"
+
+if [ -f "$EXPECTED_OUTPUT" ]; then
+    echo "✅ SUCCESS: Fixed vectors output created!"
+    
+    # Quick check of content
+    root -l -b -q -e "
+        TFile* f = TFile::Open(\"$EXPECTED_OUTPUT\");
+        TTree* t = (TTree*)f->Get(\"kaonVectors\");
+        if (t && t->GetEntries() > 0) {
+            std::vector<double>* reco_p = nullptr;
+            std::vector<double>* true_p = nullptr;
+            t->SetBranchAddress(\"reco_p\", &reco_p);
+            t->SetBranchAddress(\"true_p\", &true_p);
+            t->GetEntry(0);
+            cout << \"✅ SUCCESS: \" << reco_p->size() << \" kaon momentum pairs found!\" << endl;
+            if (reco_p->size() > 0) {
+                cout << \"Sample: reco=\" << (*reco_p)[0] << \", true=\" << (*true_p)[0] << endl;
+            }
+        } else {
+            cout << \"❌ No entries or tree not found\" << endl;
+        }
+        f->Close();
+    "
+    
+    rm -f "$EXPECTED_OUTPUT"
+else
+    echo "❌ No output file created"
+fi

@@ -99,7 +99,7 @@ BACKUP_FILE="${DETECTOR_FILE}.backup"
 # Cleanup behavior: set to "true" to remove intermediate files/logs after successful completion
 # Set to "false" to keep all intermediate files for debugging
 # Parse optional flags
-CLEANUP_ON_SUCCESS=true
+CLEANUP_ON_SUCCESS=false
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --no-cleanup)
@@ -164,8 +164,8 @@ cat > "${SCENARIO_DIR}/batch.mac" << 'EOF'
 # Initialize the run
 /run/initialize
 
-# Run simulation with specified number of events
-/run/beamOn 1000
+# Run simulation with specified number of events (10M total = 100 jobs × 100k events)
+/run/beamOn 100000
 EOF
 
 echo "Created batch.mac for headless simulation"
@@ -247,7 +247,7 @@ create_run_jobscript() {
 #!/usr/bin/env bash
 #SBATCH --job-name=Run_${CONFIG_STR}_${run_num}
 #SBATCH --partition=nodes
-#SBATCH --time=0-04:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=4G
@@ -289,8 +289,8 @@ EXIT_CODE=\$?
 # Check output file was created with reasonable size
 if [ -f "\$OUTFILE" ]; then
     FILESIZE=\$(stat -f%z "\$OUTFILE" 2>/dev/null || stat -c%s "\$OUTFILE" 2>/dev/null)
-    if [ "\$FILESIZE" -gt 10000 ]; then
-        # File exists and is large enough (>10KB) - move to results
+    if [ "\$FILESIZE" -gt 1000000 ]; then
+        # File exists and is large enough (>1MB) - move to results
         mv "\$OUTFILE" "${RESULTS_DIR}/\$OUTFILE"
         echo "Completed simulation ${run_num}: \$OUTFILE (\${FILESIZE} bytes)"
         
@@ -302,7 +302,7 @@ if [ -f "\$OUTFILE" ]; then
         rm -f "\$EXECUTABLE"
         echo "Cleaned up executable: \$EXECUTABLE"
     else
-        echo "ERROR: Output file is too small (\${FILESIZE} bytes) - simulation likely failed"
+        echo "ERROR: Output file is too small (\${FILESIZE} bytes, need >1MB) - simulation likely failed"
         rm -f "\$EXECUTABLE"
         exit 1
     fi
@@ -589,8 +589,8 @@ echo "Parsing jobs: \${PARSE_JOB_IDS[@]}"
 echo "Combination job: \$COMBINE_JOB_ID"
 echo
 echo "NOTE: Build jobs run sequentially (~10 min each) to avoid source conflicts"
-echo "      Run jobs start in parallel as soon as their build completes (~4 hrs each)"
-echo "      Total wall time: ~17 minutes (builds) + ~4 hours (parallel runs)"
+echo "      Run jobs start in parallel as soon as their build completes (~2 days each for 100k events)"
+echo "      Total wall time: ~17 minutes (builds) + ~2 days (parallel runs) for 10M total events"
 echo
 echo "Monitor progress with: squeue -u \$USER"
 echo "Results will be in: ${RESULTS_DIR}"
@@ -615,7 +615,8 @@ echo "  3. Submit 10 parsing jobs (dependent on all runs completing)"
 echo "  4. Submit 1 combination job (dependent on parsing completion)"
 echo
 echo "NOTE: Builds run sequentially to avoid conflicts, but runs execute in parallel for speed"
-echo "      Total wall time: ~17 minutes (sequential builds) + ~4 hours (parallel runs)"
+echo "      Total wall time: ~17 minutes (sequential builds) + ~2 days (parallel runs)"
+echo "      TOTAL EVENTS: 10 million (100 jobs × 100,000 events each)"
 echo
 echo "Final outputs will be:"
 echo "  - ${CONFIG_STR}_combined_acceptance.root"

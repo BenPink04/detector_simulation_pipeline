@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=DiagnoseVectorsParsing
+#SBATCH --partition=nodes
+#SBATCH --time=0-00:10:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=2G
+#SBATCH --account=pet-hadron-2019
+#SBATCH --output=%x-%j.log
+#SBATCH --error=%x-%j.err
+
+set -e
+
+module load ROOT/6.30.06-foss-2023a
+
+echo "Diagnosing vectors parsing script..."
+
+# Test with a single simulation file
+TEST_SIM_FILE="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_1.root"
+
+echo "Using test simulation file: $TEST_SIM_FILE"
+
+if [ -f "$TEST_SIM_FILE" ]; then
+    echo "✅ Test simulation file exists"
+    
+    # First check what trees exist in the simulation file
+    echo "Checking trees in simulation file..."
+    root -l -b -q -e "
+        TFile* f = TFile::Open(\"$TEST_SIM_FILE\");
+        f->ls();
+        f->Close();
+    "
+    
+    echo ""
+    echo "Checking Ntuple2 (decay products) content..."
+    root -l -b -q -e "
+        TFile* f = TFile::Open(\"$TEST_SIM_FILE\");
+        TTree* t = (TTree*)f->Get(\"Ntuple2\");
+        if (t) {
+            cout << \"Ntuple2 entries: \" << t->GetEntries() << endl;
+            t->Print();
+            
+            // Check some sample entries
+            Double_t evtNb, DKparticle_PDGEncoding;
+            t->SetBranchAddress(\"evtNb\", &evtNb);
+            t->SetBranchAddress(\"DKparticle_PDGEncoding\", &DKparticle_PDGEncoding);
+            
+            cout << \"First 10 decay products:\" << endl;
+            for (int i = 0; i < min(10, (int)t->GetEntries()); i++) {
+                t->GetEntry(i);
+                cout << \"  Entry \" << i << \": Event \" << evtNb << \", PDG \" << DKparticle_PDGEncoding << endl;
+            }
+        } else {
+            cout << \"Ntuple2 not found!\" << endl;
+        }
+        f->Close();
+    "
+    
+    echo ""
+    echo "Running vectors parsing on single file..."
+    cd /users/bp969/scratch/VIKING_FOLDER/DATA_PARSING
+    
+    # Run the vectors parsing script with verbose output
+    root -l -b -q "KLong_save_vectors.C(\"$TEST_SIM_FILE\")" 2>&1 | tee vectors_parsing_output.log
+    
+    echo ""
+    echo "Checking if vectors output was created..."
+    EXPECTED_OUTPUT="T1-250_T2-260_T3-330_T4-340_P1-215_P2-230_F1-290_F2-300_E1-400_1_vectors.root"
+    if [ -f "$EXPECTED_OUTPUT" ]; then
+        echo "✅ Vectors output created: $EXPECTED_OUTPUT"
+        
+        # Check content
+        root -l -b -q -e "
+            TFile* f = TFile::Open(\"$EXPECTED_OUTPUT\");
+            TTree* t = (TTree*)f->Get(\"kaonVectors\");
+            if (t) {
+                cout << \"Vector tree entries: \" << t->GetEntries() << endl;
+                std::vector<double>* reco_p = nullptr;
+                std::vector<double>* true_p = nullptr;
+                t->SetBranchAddress(\"reco_p\", &reco_p);
+                t->SetBranchAddress(\"true_p\", &true_p);
+                if (t->GetEntries() > 0) {
+                    t->GetEntry(0);
+                    cout << \"Number of reco_p values: \" << reco_p->size() << endl;
+                    cout << \"Number of true_p values: \" << true_p->size() << endl;
+                }
+            }
+            f->Close();
+        "
+        
+        # Cleanup
+        rm -f "$EXPECTED_OUTPUT"
+    else
+        echo "❌ No vectors output created"
+    fi
+    
+    echo ""
+    echo "Parsing output log:"
+    cat vectors_parsing_output.log | tail -20
+    rm -f vectors_parsing_output.log
+    
+else
+    echo "❌ Test simulation file not found: $TEST_SIM_FILE"
+fi
