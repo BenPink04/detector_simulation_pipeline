@@ -16,11 +16,17 @@ fi
 # Input parameters
 T1=$1 T2=$2 T3=$3 T4=$4 P1=$5 P2=$6 F1=$7 F2=$8 E1=$9
 CONFIG_STR="T1-${T1}_T2-${T2}_T3-${T3}_T4-${T4}_P1-${P1}_P2-${P2}_F1-${F1}_F2-${F2}_E1-${E1}"
+CONFIG_FUNC_NAME=$(echo "${CONFIG_STR}" | sed 's/-/_/g')  # Replace hyphens with underscores for valid C++ identifier
 RESULTS_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/${CONFIG_STR}"
 
 echo "=== OVERNIGHT PIPELINE SETUP ==="
 echo "Configuration: $CONFIG_STR"
 echo "Setting up complete pipeline with automatic histogram generation..."
+
+# Create organized log directories and temp jobs directory
+LOG_BASE_DIR="/users/bp969/scratch/JOB_LOGS/${CONFIG_STR}"
+mkdir -p "${LOG_BASE_DIR}/histograms"
+mkdir -p "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs"
 
 # Step 1: Run the main pipeline setup
 echo "=== Step 1: Setting up main simulation pipeline ==="
@@ -40,8 +46,8 @@ cat > "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/histograms_${CONFIG_STR}.
 #SBATCH --account=pet-hadron-2019
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=bp969@york.ac.uk
-#SBATCH --output=%x-%j.log
-#SBATCH --error=%x-%j.err
+#SBATCH --output=${LOG_BASE_DIR}/histograms/Histograms_${CONFIG_STR}_%j.log
+#SBATCH --error=${LOG_BASE_DIR}/histograms/Histograms_${CONFIG_STR}_%j.err
 
 set -e
 
@@ -83,7 +89,7 @@ cat > plot_acceptance_${CONFIG_STR}.C << 'ACCEPTANCE_EOF'
 #include <iostream>
 #include <string>
 
-void plot_acceptance_${CONFIG_STR}() {
+void plot_acceptance_${CONFIG_FUNC_NAME}() {
     std::vector<std::string> filenames = {
         "${RESULTS_DIR}/${CONFIG_STR}_combined_acceptance.root"
     };
@@ -176,7 +182,7 @@ cat > plot_vectors_${CONFIG_STR}.C << 'VECTORS_EOF'
 #include <iostream>
 #include <cmath>
 
-void plot_vectors_${CONFIG_STR}() {
+void plot_vectors_${CONFIG_FUNC_NAME}() {
     std::vector<std::string> filenames = {
         "${RESULTS_DIR}/${CONFIG_STR}_combined_vectors.root"
     };
@@ -256,10 +262,10 @@ VECTORS_EOF
 
 # Generate histograms
 echo "Generating acceptance histogram..."
-root -l -b -q "plot_acceptance_${CONFIG_STR}.C()"
+root -l -b -q "plot_acceptance_${CONFIG_STR}.C+"
 
 echo "Generating resolution histogram..."  
-root -l -b -q "plot_vectors_${CONFIG_STR}.C()"
+root -l -b -q "plot_vectors_${CONFIG_STR}.C+"
 
 # Copy results to a summary directory
 SUMMARY_DIR="/users/bp969/scratch/VIKING_FOLDER/PIPELINE_RESULTS/${CONFIG_STR}"

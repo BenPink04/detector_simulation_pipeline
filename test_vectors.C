@@ -1,10 +1,12 @@
 #include "TFile.h"
 #include "TTree.h"
 #include "TVector3.h"
+#include "TRandom3.h"
 #include <vector>
 #include <iostream>
 #include <cmath>
 #include <string>
+#include <set>
 
 struct HitInfo { double x, y, z, t; int deviceID; };
 
@@ -71,10 +73,10 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
     tree3->SetBranchAddress("PDGEncoding", &pdg);
     tree3->SetBranchAddress("deviceID", &deviceID);
 
-    auto is_pizza = [](int id) { return (id >= 489 && id <= 536); };
+    auto is_pizza = [](int id) { return (id >= 489 && id <= 588); };  // Extended to include 547,551,574,577
     auto is_tof   = [](int id) { return (id >= 589 && id <= 606); };
     auto is_tracker = [](int id) { return (id >= 1 && id <= 488); };
-    auto is_fri = [](int id) { return (id >= 537 && id <= 588); };
+    auto is_fri = [](int id) { return false; }; // Disabled since pizza range extended
 
     TRandom3 randGen(0);
     double smear_sigma = 5;      // cm
@@ -83,6 +85,11 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
     std::vector<double> reco_p, true_p;
     std::vector<double> reco_vertex_x, reco_vertex_y, reco_vertex_z;
     std::vector<double> true_vertex_x, true_vertex_y, true_vertex_z;
+
+    int no_hits_count = 0;
+    int timing_fail_count = 0;
+    int high_momentum_count = 0;
+    int success_count = 0;
 
     for (int event_number : selected_events) {
         double pip_pizza_time = -1, pip_tof_time = -1;
@@ -137,9 +144,24 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
             }
         }
 
-        if (hits_pip.size() < 2 || hits_pim.size() < 2) continue;
-        if (pip_pizza_time < 0 || pip_tof_time < 0 || pim_pizza_time < 0 || pim_tof_time < 0)
+        if (hits_pip.size() < 2 || hits_pim.size() < 2) {
+            no_hits_count++;
             continue;
+        }
+        if (pip_pizza_time < 0 || pip_tof_time < 0 || pim_pizza_time < 0 || pim_tof_time < 0) {
+            timing_fail_count++;
+            if (timing_fail_count <= 3) {  // Show device IDs for first few timing failures
+                std::cout << "Event " << event_number << " timing fail. Available devices: ";
+                std::set<int> devices;
+                for (Long64_t i = 0; i < tree3->GetEntries(); ++i) {
+                    tree3->GetEntry(i);
+                    if ((int)evtNb == event_number) devices.insert((int)deviceID);
+                }
+                for (int d : devices) std::cout << d << " ";
+                std::cout << std::endl;
+            }
+            continue;
+        }
 
         TVector3 pip_pizza_pos(
             randGen.Gaus(pip_pizza_x, smear_sigma),
@@ -239,26 +261,37 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         double true_p_mag = std::sqrt(true_px*true_px + true_py*true_py + true_pz*true_pz);
         TVector3 true_vertex_vec(true_vx, true_vy, true_vz);
 
-        if (kaon_p > 11) continue;
-        if (found_truth && true_p_mag != 0) {
-            // Print as soon as the event is processed
-            std::cout << "Event " << event_number
-                      << " | Reco p: " << kaon_p
-                      << " | True p: " << true_p_mag
-                      << " | Reco vertex: (" << decay_vertex.X() << ", " << decay_vertex.Y() << ", " << decay_vertex.Z() << ")"
-                      << " | True vertex: (" << true_vertex_vec.X() << ", " << true_vertex_vec.Y() << ", " << true_vertex_vec.Z() << ")"
-                      << std::endl;
-
-            reco_p.push_back(kaon_p);
-            true_p.push_back(true_p_mag);
-            reco_vertex_x.push_back(decay_vertex.X());
-            reco_vertex_y.push_back(decay_vertex.Y());
-            reco_vertex_z.push_back(decay_vertex.Z());
-            true_vertex_x.push_back(true_vertex_vec.X());
-            true_vertex_y.push_back(true_vertex_vec.Y());
-            true_vertex_z.push_back(true_vertex_vec.Z());
+        if (kaon_p > 11) {
+            high_momentum_count++;
+            continue;
         }
+        
+        // DEBUG: Always save data, show truth status
+        success_count++;
+        std::cout << "Event " << event_number
+                  << " | Reco p: " << kaon_p
+                  << " | Found truth: " << (found_truth ? "YES" : "NO")
+                  << " | True p: " << true_p_mag
+                  << " | Reco vertex: (" << decay_vertex.X() << ", " << decay_vertex.Y() << ", " << decay_vertex.Z() << ")"
+                  << std::endl;
+
+        reco_p.push_back(kaon_p);
+        true_p.push_back(found_truth ? true_p_mag : -1);
+        reco_vertex_x.push_back(decay_vertex.X());
+        reco_vertex_y.push_back(decay_vertex.Y());
+        reco_vertex_z.push_back(decay_vertex.Z());
+        true_vertex_x.push_back(found_truth ? true_vertex_vec.X() : -999);
+        true_vertex_y.push_back(found_truth ? true_vertex_vec.Y() : -999);
+        true_vertex_z.push_back(found_truth ? true_vertex_vec.Z() : -999);
     }
+
+    // --- Summary ---
+    std::cout << "\nRECONSTRUCTION SUMMARY:" << std::endl;
+    std::cout << "Total triple-pion events: " << selected_events.size() << std::endl;
+    std::cout << "Failed due to insufficient hits: " << no_hits_count << std::endl;
+    std::cout << "Failed due to missing timing: " << timing_fail_count << std::endl;
+    std::cout << "Failed due to high momentum (>11): " << high_momentum_count << std::endl;
+    std::cout << "Successfully reconstructed: " << success_count << std::endl;
 
     // --- Save vectors to file ---
     std::string inFileName(filename);

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Master Detector Simulation Script
-# Usage: ./detector_simulation_master.sh T1 T2 T3 T4 P1 P2 F1 F2 E1
+# Master Detector Simulation Script - FIXED VERSION
+# Usage: ./detector_simulation_master_FIXED.sh T1 T2 T3 T4 P1 P2 F1 F2 E1
 # Where:
 # T1-T4: Tracker positions (cm from dipole end)
 # P1-P2: Pizza detector positions (cm from dipole end)  
@@ -43,12 +43,12 @@ echo "Minimum detector position: z>${MIN_DETECTOR_POS}cm"
 ALL_POSITIONS=($T1 $T2 $T3 $T4 $P1 $P2 $F1 $F2 $E1)
 POSITION_NAMES=("T1" "T2" "T3" "T4" "P1" "P2" "F1" "F2" "E1")
 
-for i in \${!ALL_POSITIONS[@]}; do
-    pos=\${ALL_POSITIONS[i]}
-    name=\${POSITION_NAMES[i]}
-    if (( \$(echo "\$pos <= \$MIN_DETECTOR_POS" | bc -l) )); then
-        echo "ERROR: \$name position (\$pos cm) is too close to dipole magnet!"
-        echo "       Must be > \$MIN_DETECTOR_POS cm to avoid geometry overlaps"
+for i in ${!ALL_POSITIONS[@]}; do
+    pos=${ALL_POSITIONS[i]}
+    name=${POSITION_NAMES[i]}
+    if (( $(echo "$pos <= $MIN_DETECTOR_POS" | bc -l) )); then
+        echo "ERROR: $name position ($pos cm) is too close to dipole magnet!"
+        echo "       Must be > $MIN_DETECTOR_POS cm to avoid geometry overlaps"
         exit 1
     fi
 done
@@ -58,7 +58,7 @@ echo "✓ All detector positions are geometrically valid"
 # Create configuration string for filenames
 CONFIG_STR="T1-${T1}_T2-${T2}_T3-${T3}_T4-${T4}_P1-${P1}_P2-${P2}_F1-${F1}_F2-${F2}_E1-${E1}"
 
-echo "=== Master Detector Simulation Script ==="
+echo "=== Master Detector Simulation Script - FIXED VERSION ==="
 echo "Configuration: $CONFIG_STR"
 echo "Tracker positions (cm): T1=$T1, T2=$T2, T3=$T3, T4=$T4"
 echo "Pizza positions (cm): P1=$P1, P2=$P2"
@@ -124,7 +124,7 @@ done
 
 echo "=== Step 1: Backing up and editing detector construction file ==="
 
-# Create backup of original detector construction file
+# Create backup of original detector construction file (if needed for reference)
 if [ ! -f "$BACKUP_FILE" ]; then
     cp "$DETECTOR_FILE" "$BACKUP_FILE"
     echo "Created backup: $BACKUP_FILE"
@@ -132,28 +132,50 @@ else
     echo "Backup already exists: $BACKUP_FILE"
 fi
 
-# Restore from backup before editing
-cp "$BACKUP_FILE" "$DETECTOR_FILE"
+# Note: We do NOT restore from backup since the template now has correct positions
+# and we want to preserve our edits for parallel pipeline execution
 
-# Function to edit detector positions in the construction file
+# FIXED function to edit detector positions in the construction file
 edit_detector_positions() {
     local file="$1"
     
     echo "Editing detector positions in $file"
     
-    # Edit tracker positions (4 trackers)
-    sed -i "s/G4double trkrPosZ\[4\] = {[^}]*};/G4double trkrPosZ[4] = {${T1}.*cm, ${T2}.*cm, ${T3}.*cm, ${T4}.*cm};/" "$file"
+    # Show original positions before editing
+    echo "=== Original positions in file ==="
+    echo "Original tracker positions:"
+    grep "G4double trkrPosZ\[4\]" "$file" | head -1 || echo "  Not found"
+    echo "Original pizza positions:"
+    grep "G4double pizzaPosZ\[4\]" "$file" | head -1 || echo "  Not found"
+    echo "Original FRI positions:"
+    grep "G4double friPosZ\[2\]" "$file" | head -1 || echo "  Not found"
+    echo "Original TOF position:"
+    grep "G4double tofPosZ =" "$file" | head -1 || echo "  Not found"
     
-    # Edit pizza positions (2 pizzas) 
-    sed -i "s/G4double pizzaPosZ\[4\] = {[^}]*};/G4double pizzaPosZ[4] = {${P1}.*cm, ${P2}.*cm, 1100.*cm, 1200.*cm};/" "$file"
+    # FIXED: Edit tracker positions (4 trackers) - corrected regex patterns
+    sed -i "s|G4double trkrPosZ\[4\] = {[^}]*};|G4double trkrPosZ[4] = {${T1}.*cm, ${T2}.*cm, ${T3}.*cm, ${T4}.*cm};|" "$file"
     
-    # Edit FRI positions (2 FRI walls)
-    sed -i "s/G4double friPosZ\[2\] = {[^}]*};/G4double friPosZ[2] = {${F1}.*cm, ${F2}.*cm};/" "$file"
+    # FIXED: Edit pizza positions (2 pizzas) - only first two positions, keep downstream at 1100,1200
+    sed -i "s|G4double pizzaPosZ\[4\] = {[^}]*};|G4double pizzaPosZ[4] = {${P1}.*cm, ${P2}.*cm, 1100.*cm, 1200.*cm};|" "$file"
     
-    # Edit TOF position (1 TOF wall)
-    sed -i "s/G4double tofPosZ = [^;]*;/G4double tofPosZ = ${E1}.*cm;/" "$file"
+    # FIXED: Edit FRI positions (2 FRI walls)
+    sed -i "s|G4double friPosZ\[2\] = {[^}]*};|G4double friPosZ[2] = {${F1}.*cm, ${F2}.*cm};|" "$file"
+    
+    # FIXED: Edit TOF position (1 TOF wall) - corrected pattern
+    sed -i "s|G4double tofPosZ = [^;]*;|G4double tofPosZ = ${E1}.*cm;|" "$file"
     
     echo "Detector positions updated successfully"
+    
+    # Verify changes were applied correctly
+    echo "=== Verifying position updates ==="
+    echo "Tracker positions:"
+    grep "G4double trkrPosZ\[4\]" "$file" | head -1
+    echo "Pizza positions:"
+    grep "G4double pizzaPosZ\[4\]" "$file" | head -1
+    echo "FRI positions:"
+    grep "G4double friPosZ\[2\]" "$file" | head -1
+    echo "TOF position:"
+    grep "G4double tofPosZ =" "$file" | head -1
 }
 
 edit_detector_positions "$DETECTOR_FILE"
@@ -229,9 +251,9 @@ if [ ${run_num} -eq 1 ]; then
     cmake .
 fi
 
-# Edit output filename in source code using sed
+# Edit output filename in source code using sed - FIXED pattern
 echo "Setting output filename to \$OUTFILE in source code..."
-sed -i 's/G4String fileName = "[^"]*";/G4String fileName = "'\$OUTFILE'";/' "\$RUNACTION_FILE"
+sed -i 's|G4String fileName = "[^"]*";|G4String fileName = "'\$OUTFILE'";|' "\$RUNACTION_FILE"
 
 # Rebuild the executable
 echo "Rebuilding simulation executable..."
@@ -609,13 +631,19 @@ EOF
 chmod +x "/users/bp969/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
 
 echo
-echo "=== Setup completed successfully! ==="
+echo "=== FIXED Setup completed successfully! ==="
 echo
 echo "Configuration: $CONFIG_STR"
 echo "Results directory: $RESULTS_DIR"
 echo "Parsing directory: $PARSING_DIR"
 echo
-echo "To start the simulation pipeline, run:"
+echo "FIXED ISSUES:"
+echo "  ✓ Corrected SCENARIO_5_SIM template with proper detector positions"
+echo "  ✓ Fixed sed patterns to use | delimiters instead of /"
+echo "  ✓ Added verification output to confirm position updates"
+echo "  ✓ Template now starts with correct baseline positions"
+echo
+echo "To start the FIXED simulation pipeline, run:"
 echo "  /users/bp969/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
 echo
 echo "This will:"
@@ -632,7 +660,6 @@ echo "Final outputs will be:"
 echo "  - ${CONFIG_STR}_combined_acceptance.root"
 echo "  - ${CONFIG_STR}_combined_vectors.root"
 
-# Restore original detector file
-cp "$BACKUP_FILE" "$DETECTOR_FILE"
 echo
-echo "Detector construction file restored to original state."
+echo "NOTE: Detector construction file in ${SCENARIO_DIR} has been updated with your specified positions."
+echo "      Each pipeline creates its own configuration directory for parallel execution."

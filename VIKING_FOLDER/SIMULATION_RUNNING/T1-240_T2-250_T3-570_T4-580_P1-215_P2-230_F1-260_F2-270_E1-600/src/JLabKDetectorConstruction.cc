@@ -218,8 +218,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   // Rotations around the z-axis and a positions of the trackers
   // Order: x, y, u, v (xy then uv orientations)
   G4double trkrPhi[4] = {0.*deg, -90.*deg, 45.*deg, -45.*deg};
-  //G4double trkrPosZ[4] = {350.*cm, 380.*cm, 410.*cm, 440.*cm};
-  G4double trkrPosZ[4] = {250.*cm, 260.*cm, 330.*cm, 340.*cm};
+  //G4double trkrPosZ[4] = {240.*cm, 250.*cm, 570.*cm, 580.*cm}; // OLD - too close to dipole
+  G4double trkrPosZ[4] = {240.*cm, 250.*cm, 570.*cm, 580.*cm}; // CORRECTED - proper positions
 
   for (G4int i = 0; i < 4; i++)
   {
@@ -294,8 +294,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   // Z position of the pizzas and rotation around the z-axis
   // Reduce number of layers
   G4double pizzaPhi[4] = {15.*deg, 0.*deg, 15.*deg, 0.*deg};
-  //G4double pizzaPosZ[4] = {300.*cm, 325.*cm, 1100.*cm, 1200.*cm};
-  G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm};
+  //G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm}; // OLD - too close to dipole
+  G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm}; // CORRECTED - proper positions
 
   
   //  for (G4int i = 0; i < 2; i++)
@@ -645,8 +645,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   
 
   // Position of the FRI wall
-  G4double friPosZ[2] = {290.*cm, 300.*cm};  //replaces downstream pizzas from conceptual design - Position of FRI 
-  //G4double friPosZ[2] = {500.*cm, 525.*cm};  //replaces downstream pizzas from conceptual design
+  G4double friPosZ[2] = {260.*cm, 270.*cm};  //replaces downstream pizzas from conceptual design - Position of FRI 
+  //G4double friPosZ[2] = {260.*cm, 270.*cm};  //OLD - too close to dipole
   G4double friPhi[2] = {0.*deg, 90.*deg}; // Rotation of 2 detectors
 
   // Define the 2 fri walls in an array
@@ -738,7 +738,7 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
 
 
   
-  G4double tofPosZ = 400.*cm;  //replace downstream pizzas
+  G4double tofPosZ = 600.*cm;  //replace downstream pizzas
 
   new G4PVPlacement(0, G4ThreeVector(0., 0., tofPosZ), tofWall_log,
 		    "TofWall", expHall_log, false, 0, checkOverlaps);

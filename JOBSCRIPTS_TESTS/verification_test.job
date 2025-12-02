@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=Verification_Test
+#SBATCH --partition=nodes
+#SBATCH --time=0-00:30:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=4G
+#SBATCH --account=pet-hadron-2019
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=bp969@york.ac.uk
+#SBATCH --output=/users/bp969/scratch/JOB_LOGS/verification_test_%j.log
+#SBATCH --error=/users/bp969/scratch/JOB_LOGS/verification_test_%j.err
+
+set -e
+
+# Load required modules for Geant4 simulation
+module purge
+module load Geant4/11.2.2-GCC-12.3.0
+module load ROOT/6.30.06-foss-2023a
+
+SEED=999999
+OUTFILE="verification_test.root"
+WORKDIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/T1-240_T2-250_T3-570_T4-580_P1-215_P2-230_F1-260_F2-270_E1-600"
+
+echo "=== Verification Test starting at $(date) ==="
+echo "Testing corrected detector positions:"
+echo "  Trackers: 240, 250, 570, 580 cm"
+echo "  Pizza: 215, 230 cm"  
+echo "  FRI: 260, 270 cm"
+echo "  TOF: 600 cm"
+echo "Seed: $SEED"
+echo "Output: $OUTFILE"
+
+cd $WORKDIR
+
+# Verify correct detector positions are in place
+echo "=== Verifying detector positions ==="
+grep -E "(trkr|pizza|fri|tof)PosZ.*=" src/JLabKDetectorConstruction.cc | grep -v "//"
+
+# Edit output filename in source code for this test
+echo "Setting output filename to $OUTFILE in source code..."
+sed -i 's|G4String fileName = "[^"]*";|G4String fileName = "'$OUTFILE'";|' src/JLabKRunAction.cc
+
+# Build the simulation if needed
+if [ ! -f jlabk ]; then
+    echo "Building simulation..."
+    cmake .
+    make -j4
+else
+    echo "Using existing executable..."
+fi
+
+# Run verification simulation
+echo "Running verification simulation with 10,000 events..."
+./jlabk test_verification.mac $SEED
+EXIT_CODE=$?
+
+# Check output file was created with reasonable size
+if [ -f "$OUTFILE" ]; then
+    FILESIZE=$(stat -f%z "$OUTFILE" 2>/dev/null || stat -c%s "$OUTFILE" 2>/dev/null)
+    echo "Verification simulation completed: $OUTFILE (${FILESIZE} bytes)"
+    
+    if [ "$FILESIZE" -gt 100000 ]; then
+        echo "✅ SUCCESS: Output file size looks good (>100KB)"
+        
+        # Quick test of the parsing to see if we get reconstructable events
+        module load ROOT/6.30.06-foss-2023a
+        echo "=== Testing parsing on verification output ==="
+        cd /users/bp969/scratch
+        root -l -b -e '.L test_vectors.C+' -e 'KLong_save_vectors("'$WORKDIR'/'$OUTFILE'")' -e '.q' 2>&1 | tail -20
+        
+    else
+        echo "❌ WARNING: Output file is smaller than expected (${FILESIZE} bytes)"
+    fi
+else
+    echo "❌ ERROR: Output file '$OUTFILE' not created (exit code: $EXIT_CODE)"
+    exit 1
+fi
+
+echo "=== Verification Test completed at $(date) ==="

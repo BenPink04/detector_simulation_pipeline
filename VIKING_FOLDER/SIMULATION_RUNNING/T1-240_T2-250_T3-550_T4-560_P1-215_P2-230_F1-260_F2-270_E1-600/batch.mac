@@ -1,0 +1,14 @@
+# Batch mode macro for headless execution
+/control/verbose 0
+/run/verbose 0
+/event/verbose 0
+/tracking/verbose 0
+
+# Set number of threads for parallel processing
+/run/numberOfThreads 4
+
+# Initialize the run
+/run/initialize
+
+# Run simulation with specified number of events (10M total = 100 jobs × 100k events)
+/run/beamOn 100000

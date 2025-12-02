@@ -7,9 +7,25 @@
 
 void KLong_plot_acceptance() {
     std::vector<std::string> filenames = {
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-250_T2-260_T3-370_T4-380_P1-215_P2-230_F1-290_F2-300_E1-400/T1-250_T2-260_T3-370_T4-380_P1-215_P2-230_F1-290_F2-300_E1-400_combined_acceptance.root"
+        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-550_T4-560_P1-215_P2-230_F1-260_F2-270_E1-600/T1-240_T2-250_T3-550_T4-560_P1-215_P2-230_F1-260_F2-270_E1-600_combined_acceptance.root"
         // Add more filenames as needed
     };
+
+    // Extract configuration string from filename
+    std::string config_string = "";
+    if (!filenames.empty()) {
+        std::string fname = filenames[0];
+        
+        // Find the last occurrence of the configuration pattern (after the last '/')
+        size_t last_slash = fname.find_last_of('/');
+        std::string basename = (last_slash != std::string::npos) ? fname.substr(last_slash + 1) : fname;
+        
+        size_t start = basename.find("T1-");
+        size_t end = basename.find("_combined_acceptance.root");
+        if (start != std::string::npos && end != std::string::npos) {
+            config_string = basename.substr(start, end - start);
+        }
+    }
 
     double p_min = 0.0, p_max = 10.0;
     double bin_width = 0.5;
@@ -52,7 +68,13 @@ void KLong_plot_acceptance() {
         file->Close();
     }
 
-    TH1D *h_proportion = new TH1D("h_proportion", "Reconstruction Acceptance;True Momentum [GeV/c];Acceptance (Reconstructed/Total)", n_bins, p_min, p_max);
+    std::string title = "Reconstruction Acceptance";
+    if (!config_string.empty()) {
+        title += " (Config: " + config_string + ")";
+    }
+    title += ";True Momentum [GeV/c];Acceptance (Reconstructed/Total)";
+    
+    TH1D *h_proportion = new TH1D("h_proportion", title.c_str(), n_bins, p_min, p_max);
 
     for (int bin = 0; bin < n_bins; ++bin) {
         int reconstructed_vertices = reco_in_bin[bin];
@@ -78,8 +100,15 @@ void KLong_plot_acceptance() {
 
     h_proportion->Draw("hist");
 
+    // Create filename with configuration string
+    std::string output_filename = "KLong_acceptance_plot";
+    if (!config_string.empty()) {
+        output_filename += "_" + config_string;
+    }
+    output_filename += ".png";
+    
     // Save the plot as PNG files
-    gPad->SaveAs("KLong_acceptance_plot.png");
+    gPad->SaveAs(output_filename.c_str());
 
-    std::cout << "Plot saved as KLong_acceptance_plot.png" << std::endl;
+    std::cout << "Plot saved as " << output_filename << std::endl;
 }

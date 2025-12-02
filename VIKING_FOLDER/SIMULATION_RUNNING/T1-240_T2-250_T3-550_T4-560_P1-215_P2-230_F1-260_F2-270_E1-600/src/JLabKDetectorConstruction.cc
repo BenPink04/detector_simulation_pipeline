@@ -148,8 +148,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
 
   G4LogicalVolume* trkrBox_log = new G4LogicalVolume(trkrBox, air, "TrackerBox");
   
-  // Tracker aperture
-  G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,
+  // Tracker aperture (add 0.5 mm clearance to avoid guide tube overlaps)
+  G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad + 0.5*mm,
                                trkrHalfZ + .1*mm, 0., 360.*deg);
 
   //Tracker straws - 4 layers of 122 straws, each layer offset by one straw radius
@@ -166,18 +166,18 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
                              -42.0*cm, -41.2*cm, -40.4*cm, -39.6*cm, -38.8*cm, -38.0*cm, -37.2*cm, -36.4*cm,
 			     -35.6*cm, -34.8*cm, -34.0*cm, -33.2*cm, -32.4*cm, -31.6*cm, -30.8*cm, -30.0*cm,
                              -29.2*cm, -28.4*cm, -27.6*cm, -26.8*cm, -26.0*cm, -25.2*cm, -24.4*cm, -23.6*cm,
-			     -22.8*cm, -22.0*cm, -21.2*cm, -20.4*cm, -19.6*cm, -18.8*cm, -18.0*cm,
-			     -17.2*cm, -16.4*cm, -15.6*cm, -14.8*cm, -14.0*cm, -13.2*cm, -12.4*cm, -11.6*cm,
-			     -10.8*cm, -10.0*cm,  -9.2*cm,  -8.4*cm,  -7.6*cm,  -6.8*cm,  -6.0*cm,  -5.2*cm,
-			      -4.4*cm,  -3.6*cm,  -2.8*cm,  -2.0*cm,  -1.2*cm,  -0.4*cm,   0.4*cm,   1.2*cm,
-			       2.0*cm,   2.8*cm,   3.6*cm,   4.4*cm,   5.2*cm,   6.0*cm,   6.8*cm,   7.6*cm,
-			       8.4*cm,   9.2*cm,  10.0*cm,  10.8*cm,  11.6*cm,  12.4*cm,  13.2*cm,  14.0*cm,
-			      14.8*cm,  15.6*cm,  16.4*cm,  17.2*cm,  18.0*cm,  18.8*cm,  19.6*cm,  20.4*cm,
-			      21.2*cm,  22.0*cm,  22.8*cm,  23.6*cm,  24.4*cm,  25.2*cm,  26.0*cm,  26.8*cm,
-			      27.6*cm,  28.4*cm,  29.2*cm,  30.0*cm,  30.8*cm,  31.6*cm,  32.4*cm,  33.2*cm,
-			      34.0*cm,  34.8*cm,  35.6*cm,  36.4*cm,  37.2*cm,  38.0*cm,  38.8*cm,  39.6*cm,
-			      40.4*cm,  41.2*cm,  42.0*cm,  42.8*cm,  43.6*cm,  44.4*cm,  45.2*cm,  46.0*cm,
-			      46.8*cm,  47.6*cm};
+			     -22.8*cm, -22.0*cm, -21.2*cm, -20.4*cm, -19.6*cm, -18.8*cm, -18.0*cm, -17.2*cm,
+			     -16.4*cm, -15.6*cm, -14.8*cm, -14.0*cm, -13.2*cm, -12.4*cm, -11.6*cm, -10.8*cm,
+			     -10.0*cm,  -9.2*cm,  -8.4*cm,  -7.6*cm,  -6.8*cm,  -6.0*cm,  -5.2*cm,  -4.4*cm,
+			      -3.6*cm,  -2.8*cm,  -2.0*cm,  -1.2*cm,  -0.4*cm,   0.4*cm,   1.2*cm,   2.0*cm,
+			       2.8*cm,   3.6*cm,   4.4*cm,   5.2*cm,   6.0*cm,   6.8*cm,   7.6*cm,   8.4*cm,
+			       9.2*cm,  10.0*cm,  10.8*cm,  11.6*cm,  12.4*cm,  13.2*cm,  14.0*cm,  14.8*cm,
+			      15.6*cm,  16.4*cm,  17.2*cm,  18.0*cm,  18.8*cm,  19.6*cm,  20.4*cm,  21.2*cm,
+			      22.0*cm,  22.8*cm,  23.6*cm,  24.4*cm,  25.2*cm,  26.0*cm,  26.8*cm,  27.6*cm,
+			      28.4*cm,  29.2*cm,  30.0*cm,  30.8*cm,  31.6*cm,  32.4*cm,  33.2*cm,  34.0*cm,
+			      34.8*cm,  35.6*cm,  36.4*cm,  37.2*cm,  38.0*cm,  38.8*cm,  39.6*cm,  40.4*cm,
+			      41.2*cm,  42.0*cm,  42.8*cm,  43.6*cm,  44.4*cm,  45.2*cm,  46.0*cm,  46.8*cm,
+			      47.6*cm,  48.4*cm};
 
   G4double strawPosZ[4] = {-1.5*cm, -0.5*cm, 0.5*cm, 1.5*cm};
 			     
@@ -218,8 +218,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   // Rotations around the z-axis and a positions of the trackers
   // Order: x, y, u, v (xy then uv orientations)
   G4double trkrPhi[4] = {0.*deg, -90.*deg, 45.*deg, -45.*deg};
-  //G4double trkrPosZ[4] = {350.*cm, 380.*cm, 410.*cm, 440.*cm};
-  G4double trkrPosZ[4] = {250.*cm, 260.*cm, 330.*cm, 340.*cm};
+  //G4double trkrPosZ[4] = {240.*cm, 250.*cm, 550.*cm, 560.*cm}; // OLD - too close to dipole
+  G4double trkrPosZ[4] = {240.*cm, 250.*cm, 550.*cm, 560.*cm}; // CORRECTED - proper positions
 
   for (G4int i = 0; i < 4; i++)
   {
@@ -256,8 +256,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   // Pizza slices to be placed inside the pizza
   // G4VSolid* pizzaSlice = new G4Tubs("PizzaSlice", gdTube_outerRad,
   //                                   pizza_outerRad, pizza_halfThk, 0., 57.*deg);
-  G4VSolid* pizzaSlice = new G4Tubs("PizzaSlice", gdTube_outerRad,
-                                    pizza_outerRad, pizza_halfThk, 0., 14.*deg);//<15 degrees for 24-slice
+  G4VSolid* pizzaSlice = new G4Tubs("PizzaSlice", gdTube_outerRad + 0.1*mm,
+                                    pizza_outerRad, pizza_halfThk, 0., 14.9*deg);//Slightly less than 15 degrees to avoid overlaps
 
   G4LogicalVolume* pizzaSlice_log = new G4LogicalVolume(pizzaSlice, plastic, 
                                                         "PizzaSlice");
@@ -294,8 +294,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   // Z position of the pizzas and rotation around the z-axis
   // Reduce number of layers
   G4double pizzaPhi[4] = {15.*deg, 0.*deg, 15.*deg, 0.*deg};
-  //G4double pizzaPosZ[4] = {300.*cm, 325.*cm, 1100.*cm, 1200.*cm};
-  G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm};
+  //G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm}; // OLD - too close to dipole
+  G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm}; // CORRECTED - proper positions
 
   
   //  for (G4int i = 0; i < 2; i++)
@@ -645,8 +645,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   
 
   // Position of the FRI wall
-  G4double friPosZ[2] = {290.*cm, 300.*cm};  //replaces downstream pizzas from conceptual design - Position of FRI 
-  //G4double friPosZ[2] = {500.*cm, 525.*cm};  //replaces downstream pizzas from conceptual design
+  G4double friPosZ[2] = {260.*cm, 270.*cm};  //replaces downstream pizzas from conceptual design - Position of FRI 
+  //G4double friPosZ[2] = {260.*cm, 270.*cm};  //OLD - too close to dipole
   G4double friPhi[2] = {0.*deg, 90.*deg}; // Rotation of 2 detectors
 
   // Define the 2 fri walls in an array
@@ -738,7 +738,7 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
 
 
   
-  G4double tofPosZ = 400.*cm;  //replace downstream pizzas
+  G4double tofPosZ = 600.*cm;  //replace downstream pizzas
 
   new G4PVPlacement(0, G4ThreeVector(0., 0., tofPosZ), tofWall_log,
 		    "TofWall", expHall_log, false, 0, checkOverlaps);
