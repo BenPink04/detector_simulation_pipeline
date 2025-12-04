@@ -9,7 +9,7 @@
 
 void KLong_plot_resolution_histbar() {
     std::vector<std::string> filenames = {
-    "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-550_T4-560_P1-215_P2-230_F1-260_F2-270_E1-600/T1-240_T2-250_T3-550_T4-560_P1-215_P2-230_F1-260_F2-270_E1-600_combined_vectors.root"
+    "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700_combined_vectors.root"
     };
 
     // Extract configuration string from filename
@@ -53,12 +53,20 @@ void KLong_plot_resolution_histbar() {
         std::vector<double> *true_p = nullptr;
         tree->SetBranchAddress("reco_p", &reco_p);
         tree->SetBranchAddress("true_p", &true_p);
-        tree->GetEntry(0);
-
-        for (size_t i = 0; i < reco_p->size(); ++i) {
-            double res = std::abs(((*reco_p)[i] - (*true_p)[i]) / (*true_p)[i]);
-            if (res > anomaly_threshold) continue; // Skip anomalous results
-            h2->Fill((*true_p)[i], res);
+        
+        // Loop through ALL entries in the combined file (each entry contains vectors from one original file)
+        Long64_t nEntries = tree->GetEntries();
+        std::cout << "Processing " << nEntries << " entries from " << fname << std::endl;
+        
+        for (Long64_t entry = 0; entry < nEntries; ++entry) {
+            tree->GetEntry(entry);
+            
+            // Process all events in this entry's vectors
+            for (size_t i = 0; i < reco_p->size(); ++i) {
+                double res = std::abs(((*reco_p)[i] - (*true_p)[i]) / (*true_p)[i]);
+                if (res > anomaly_threshold) continue; // Skip anomalous results
+                h2->Fill((*true_p)[i], res);
+            }
         }
         inFile->Close();
     }

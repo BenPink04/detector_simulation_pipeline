@@ -7,7 +7,7 @@
 
 void KLong_plot_acceptance() {
     std::vector<std::string> filenames = {
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-550_T4-560_P1-215_P2-230_F1-260_F2-270_E1-600/T1-240_T2-250_T3-550_T4-560_P1-215_P2-230_F1-260_F2-270_E1-600_combined_acceptance.root"
+        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700_combined_acceptance.root"
         // Add more filenames as needed
     };
 
@@ -54,15 +54,22 @@ void KLong_plot_acceptance() {
         tree->SetBranchAddress("reco_flag_vec", &reco_flag_vec);
         tree->SetBranchAddress("n_triple_pion_events", &n_triple_pion_events);
 
-        tree->GetEntry(0);
-
-        for (int i = 0; i < n_triple_pion_events; ++i) {
-            double p = (*true_mom_vec)[i];
-            int bin = int((p - p_min) / bin_width);
-            if (bin < 0 || bin >= n_bins) continue;
-            total_in_bin[bin]++;
-            if ((*reco_flag_vec)[i]) {
-                reco_in_bin[bin]++;
+        // Loop through ALL entries in the combined file (each entry contains data from one original file)
+        Long64_t nEntries = tree->GetEntries();
+        std::cout << "Processing " << nEntries << " entries from " << fname << std::endl;
+        
+        for (Long64_t entry = 0; entry < nEntries; ++entry) {
+            tree->GetEntry(entry);
+            
+            // Process all events in this entry
+            for (int i = 0; i < n_triple_pion_events; ++i) {
+                double p = (*true_mom_vec)[i];
+                int bin = int((p - p_min) / bin_width);
+                if (bin < 0 || bin >= n_bins) continue;
+                total_in_bin[bin]++;
+                if ((*reco_flag_vec)[i]) {
+                    reco_in_bin[bin]++;
+                }
             }
         }
         file->Close();

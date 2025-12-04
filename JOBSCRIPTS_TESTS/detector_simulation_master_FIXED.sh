@@ -64,7 +64,6 @@ echo "Tracker positions (cm): T1=$T1, T2=$T2, T3=$T3, T4=$T4"
 echo "Pizza positions (cm): P1=$P1, P2=$P2"
 echo "FRI positions (cm): F1=$F1, F2=$F2" 
 echo "TOF position (cm): E1=$E1"
-echo
 
 # Set paths
 BASE_SCENARIO_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/SCENARIO_5_SIM"
@@ -196,8 +195,8 @@ cat > "${SCENARIO_DIR}/batch.mac" << 'EOF'
 # Initialize the run
 /run/initialize
 
-# Run simulation with specified number of events (10M total = 100 jobs × 100k events)
-/run/beamOn 100000
+# Run simulation with specified number of events (1M total = 100 jobs × 10,000 events)
+/run/beamOn 10000
 EOF
 
 echo "Created batch.mac for headless simulation"
@@ -218,7 +217,7 @@ create_build_jobscript() {
 #!/usr/bin/env bash
 #SBATCH --job-name=Build_${CONFIG_STR}_${run_num}
 #SBATCH --partition=nodes
-#SBATCH --time=0-00:10:00
+#SBATCH --time=0-04:10:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=2G
@@ -403,32 +402,30 @@ for i in \$(seq ${group_start} ${group_end}); do
     done
 done
 
-# Parallel parsing
+# Parallel parsing (restored - plotting script fix resolved the data access issue)
 for i in \$(seq ${group_start} ${group_end}); do
     (
         INPUT_FILE="${RESULTS_DIR}/${CONFIG_STR}_\${i}.root"
-        ACCEPTANCE_OUTPUT="${CONFIG_STR}_\${i}_acceptance.root"
-        VECTORS_OUTPUT="${CONFIG_STR}_\${i}_vectors.root"
+        ACCEPTANCE_OUTPUT="${RESULTS_DIR}/${CONFIG_STR}_\${i}_acceptance.root"
+        VECTORS_OUTPUT="${RESULTS_DIR}/${CONFIG_STR}_\${i}_vectors.root"
         
         echo "Processing file \$i: \$INPUT_FILE"
         
-        # Run acceptance analysis (creates output in current dir)
+        # Run acceptance analysis (creates output in RESULTS_DIR)
         root -l -b -q "KLong_save_momentum_acceptance.C(\"\$INPUT_FILE\")"
         
-        # Run vector analysis (creates output in current dir)
+        # Run vector analysis (creates output in RESULTS_DIR)
         root -l -b -q "KLong_save_vectors.C(\"\$INPUT_FILE\")"
         
-        # Move output files to results directory
+        # Check that output files were created (they're already in RESULTS_DIR)
         if [ -f "\$ACCEPTANCE_OUTPUT" ]; then
-            mv "\$ACCEPTANCE_OUTPUT" "${RESULTS_DIR}/"
-            echo "Moved \$ACCEPTANCE_OUTPUT to ${RESULTS_DIR}/"
+            echo "Confirmed \$ACCEPTANCE_OUTPUT created successfully"
         else
             echo "ERROR: Expected output file \$ACCEPTANCE_OUTPUT not created!"
         fi
         
         if [ -f "\$VECTORS_OUTPUT" ]; then
-            mv "\$VECTORS_OUTPUT" "${RESULTS_DIR}/"
-            echo "Moved \$VECTORS_OUTPUT to ${RESULTS_DIR}/"
+            echo "Confirmed \$VECTORS_OUTPUT created successfully"
         else
             echo "ERROR: Expected output file \$VECTORS_OUTPUT not created!"
         fi

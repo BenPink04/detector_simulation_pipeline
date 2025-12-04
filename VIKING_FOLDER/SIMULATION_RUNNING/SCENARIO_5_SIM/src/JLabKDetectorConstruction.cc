@@ -73,15 +73,18 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   //------------------------------------------------------------------------
 
   //------------------------------------------------------------------------  
-  // Guide tube
-  // Outer radius, thickness, inner radius and half length
+  // Guide tube - Parameters defined but geometry NOT placed to avoid overlaps
+  // Keep parameters for use by other components (tracker apertures, etc.)
   G4double gdTube_outerRad = 3.*cm;
   G4double gdTubeThk = .1*cm;
   G4double gdTube_inrRad = gdTube_outerRad - gdTubeThk;
   G4double gdTube_halfL = 1000.*cm;
   
-  // Position along z-axis
+  // Position along z-axis (defined but not used)
   G4double gdTubePosZ = 850.*cm;
+
+  // GuideTube geometry creation and placement DISABLED to eliminate overlaps
+  /*
 
   G4VSolid* gdTube = new G4Tubs("GuideTube", gdTube_inrRad, gdTube_outerRad, 
                                 gdTube_halfL, 0., 360.*deg);
@@ -91,7 +94,9 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   
   new G4PVPlacement(0, G4ThreeVector(0., 0., gdTubePosZ), gdTube_log, 
                     "GuideTube", expHall_log, false, 0, checkOverlaps);
-
+// Line 135: THIS REFERENCES THE REMOVED GUIDETUBE
+G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_outerRad undefined after commenting out GuideTube
+                             trkrHalfZ + .1*mm, 0., 360.*deg);
   // Hollow shell of the guide tube where vacuum is created 
   G4VSolid* gdTubeHollow = new G4Tubs("GuideTubeHollow", 0., gdTube_inrRad,
                                       gdTube_halfL, 0., 360.*deg);
@@ -102,7 +107,7 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   new G4PVPlacement(0, G4ThreeVector(0., 0., gdTubePosZ), gdTubeHollow_log,
                     "GuideTubeHollow", expHall_log, false, 0, checkOverlaps);
   //------------------------------------------------------------------------
-
+  */
   //------------------------------------------------------------------------  
   // Dipole = box with an extrusion 
   // Dipole's half length, thickness and extrusion half length
@@ -154,7 +159,7 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
 
   //Tracker straws - 4 layers of 122 straws, each layer offset by one straw radius
   // Outer radius, thickness, inner radius and half length
-  G4double trkStraw_outerRad = 0.4*cm;
+  G4double trkStraw_outerRad = 0.40*cm;
   //G4double trkStraw_outerRad = 4*cm;
   G4double trkStrawThk = .0026*cm;
   //G4double trkStrawThk = 2*cm;
@@ -247,9 +252,9 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   G4LogicalVolume* pizza1_log = new G4LogicalVolume(pizza1, air, "Pizza1");
 
 
-  //Conical layer
+  //Flat layer (changed from conical to eliminate mother volume overlap issues)
   G4VSolid* pizza2 = new G4Tubs("Pizza2", gdTube_outerRad, pizza_outerRad,
-                               pizza_halfVolThk, 0., 360.*deg);
+                               pizza_halfThk, 0., 360.*deg);
 
   G4LogicalVolume* pizza2_log = new G4LogicalVolume(pizza2, air, "Pizza2");
 
@@ -284,8 +289,8 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
       
       G4RotationMatrix* pizzaSliceRot = new G4RotationMatrix;
       pizzaSliceRot->rotateZ(pizzaSlicePhi);
-      pizzaSliceRot->rotateY(20.*deg);
-      
+      //pizzaSliceRot->rotateY(20.*deg);
+      //Commented out Y rotation to make flat pizza layer
       new G4PVPlacement(pizzaSliceRot, G4ThreeVector(0., 0., 0.), pizzaSlice_log,
 			"PizzaSlice", pizza2_log, false, 513 + i, checkOverlaps);
     }
@@ -767,12 +772,12 @@ G4VPhysicalVolume* JLabKDetectorConstruction::Construct()
   
   // Visualisation attributes
   expHall_log->SetVisAttributes(G4VisAttributes::GetInvisible());
-
+  /*
   G4VisAttributes* gdTubeAtt = new G4VisAttributes(G4Colour(.5, .5, .5, .4));
   gdTubeAtt->SetDaughtersInvisible(false);
   gdTubeAtt->SetForceSolid(true);
   gdTube_log->SetVisAttributes(gdTubeAtt);
-
+  */
   G4VisAttributes* dipoleAtt = new G4VisAttributes(G4Colour(.7, .7, .7));
   dipoleAtt->SetDaughtersInvisible(false);
   dipoleAtt->SetForceSolid(true);
