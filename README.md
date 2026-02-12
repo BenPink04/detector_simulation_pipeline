@@ -2,12 +2,12 @@
 
 A comprehensive Geant4-based detector simulation pipeline for kaon reconstruction analysis. This pipeline automates the complete process from detector geometry configuration through data analysis and histogram generation.
 
-## 🚨 **IMPORTANT: Critical Fixes Applied (December 2024)**
+##  **IMPORTANT: Critical Fixes Applied (December 2024)**
 
 **If you're getting empty histograms or zero reconstructable events, you MUST use the fixed version:**
 
-- ✅ **Use**: `detector_simulation_master_FIXED.sh` 
-- ❌ **Avoid**: `detector_simulation_master.sh` (has detector positioning bugs)
+-  **Use**: `detector_simulation_master_FIXED.sh` 
+-  **Avoid**: `detector_simulation_master.sh` (has detector positioning bugs)
 
 **Key fix**: Corrected hardcoded detector positions that were too close to dipole magnet, causing particles to never reach detectors.
 
@@ -29,7 +29,7 @@ This project provides an automated pipeline for:
 
 ## Quick Start
 
-### ⚠️ **CRITICAL: Use Fixed Version**
+###  **CRITICAL: Use Fixed Version**
 
 **Use the FIXED master script** to avoid detector positioning issues:
 ```bash
@@ -79,19 +79,19 @@ root -l -b -e '.L test_vectors.C+' -e 'KLong_save_vectors("VIKING_FOLDER/DATA_PA
 
 ```
 ├── JOBSCRIPTS_TESTS/
-│   ├── detector_simulation_master_FIXED.sh  # ✅ FIXED pipeline script (USE THIS)
-│   ├── detector_simulation_master.sh        # ❌ Original (has positioning bugs)
+│   ├── detector_simulation_master_FIXED.sh  #  FIXED pipeline script (USE THIS)
+│   ├── detector_simulation_master.sh        #  Original (has positioning bugs)
 │   ├── README_detector_pipeline.md          # Detailed documentation
 │   └── test_*.job                           # Testing and verification scripts
 ├── VIKING_FOLDER/
 │   ├── SIMULATION_RUNNING/              # Geant4 simulation code and scenarios
-│   │   ├── SCENARIO_5_SIM/             # ✅ FIXED template (corrected positions)
+│   │   ├── SCENARIO_5_SIM/             # FIXED template (corrected positions)
 │   │   └── T1-*_T2-*_*/                # Generated configuration directories
 │   ├── SIMULATION_RESULTS/              # Generated data outputs  
 │   ├── DATA_PARSING/                    # ROOT analysis macros
 │   ├── HISTOGRAM_MAKING/                # Plotting and visualization tools
 │   └── SCENARIOS/                       # Detector configuration files
-├── test_vectors.C                       # ✅ FIXED analysis script (added includes)
+├── test_vectors.C                       #  FIXED analysis script (added includes)
 └── README.md                           # This file
 ```
 
@@ -143,7 +143,7 @@ root -l 'KLong_plot_acceptance_comparison.C()'
 
 ## Critical Fixes (December 2024)
 
-### ⚠️ **Detector Positioning Issue - RESOLVED**
+###  **Detector Positioning Issue - RESOLVED**
 
 **Problem**: Original pipeline was generating empty histograms due to incorrect detector positions.
 
@@ -162,7 +162,7 @@ root -l 'KLong_plot_acceptance_comparison.C()'
 - **After fix**: ~45 reconstructable events per 1M simulated events
 - **Full pipeline**: Expected ~450 total events from 10M simulations
 
-### ✅ **Verification Results**
+###  **Verification Results**
 
 Tested configuration T1-240_T2-250_T3-570_T4-580_P1-215_P2-230_F1-260_F2-270_E1-600:
 ```
