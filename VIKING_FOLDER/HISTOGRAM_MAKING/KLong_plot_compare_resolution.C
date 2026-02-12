@@ -5,22 +5,232 @@
 #include "TH1D.h"
 #include "TLegend.h"
 #include "TStyle.h"
+#include "TSystem.h"
+#include "TSystemDirectory.h"
+#include "TSystemFile.h"
+#include "TList.h"
+#include "TBox.h"
 #include <vector>
 #include <iostream>
 #include <iomanip>
 #include <cmath>
 #include <string>
 #include <map>
+#include <algorithm>
+#include <sstream>
+
+// Structure to hold detector positions
+struct DetectorLayout {
+    std::vector<double> trackers;  // T1-T4
+    std::vector<double> pizzas;    // P1-P2
+    std::vector<double> fris;      // F1-F2
+    double end_detector;            // E1
+};
+
+// Parse configuration string to extract detector positions
+DetectorLayout parseConfigString(const std::string& config) {
+    DetectorLayout layout;
+    
+    // Parse format: T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700
+    std::istringstream ss(config);
+    std::string token;
+    
+    while (std::getline(ss, token, '_')) {
+        if (token.empty()) continue;
+        
+        // Find the hyphen separator
+        size_t pos = token.find('-');
+        if (pos == std::string::npos) continue;
+        
+        std::string detector_type = token.substr(0, pos);
+        double position = std::stod(token.substr(pos + 1));
+        
+        // Skip disabled components (position = 0)
+        if (position == 0) continue;
+        
+        if (detector_type[0] == 'T') {
+            layout.trackers.push_back(position);
+        } else if (detector_type[0] == 'P') {
+            layout.pizzas.push_back(position);
+        } else if (detector_type[0] == 'F') {
+            layout.fris.push_back(position);
+        } else if (detector_type[0] == 'E') {
+            layout.end_detector = position;
+        }
+    }
+    
+    return layout;
+}
+
+// Draw detector layout schematic
+void drawDetectorLayout(const std::vector<std::string>& config_labels,
+                        const std::vector<int>& line_colors,
+                        double x_min, double x_max, double y_min, double y_max) {
+    // Set up coordinate system in user coordinates
+    gPad->Range(x_min, y_min, x_max, y_max);
+    
+    // Find global min/max positions for scaling
+    double min_pos = 1e9, max_pos = -1e9;
+    for (const auto& config : config_labels) {
+        DetectorLayout layout = parseConfigString(config);
+        for (double pos : layout.trackers) {
+            if (pos < min_pos) min_pos = pos;
+            if (pos > max_pos) max_pos = pos;
+        }
+        for (double pos : layout.pizzas) {
+            if (pos < min_pos) min_pos = pos;
+            if (pos > max_pos) max_pos = pos;
+        }
+        for (double pos : layout.fris) {
+            if (pos < min_pos) min_pos = pos;
+            if (pos > max_pos) max_pos = pos;
+        }
+        if (layout.end_detector < min_pos) min_pos = layout.end_detector;
+        if (layout.end_detector > max_pos) max_pos = layout.end_detector;
+    }
+    
+    // Add padding
+    double range = max_pos - min_pos;
+    min_pos -= range * 0.1;
+    max_pos += range * 0.1;
+    
+    // Title (in user coordinates)
+    TText *title = new TText(0.5, 0.98, "Detector Layouts (Top View)");
+    title->SetTextAlign(23);
+    title->SetTextSize(0.04);
+    title->Draw();
+    
+    // Draw each configuration
+    int n_configs = config_labels.size();
+    double y_spacing = 0.85 / (n_configs + 1);
+    
+    for (size_t i = 0; i < config_labels.size(); ++i) {
+        DetectorLayout layout = parseConfigString(config_labels[i]);
+        double y_center = 0.90 - (i + 1) * y_spacing;
+        
+        // Draw configuration line indicator
+        TLine *indicator = new TLine(0.02, y_center, 0.08, y_center);
+        indicator->SetLineColor(line_colors[i]);
+        indicator->SetLineWidth(4);
+        indicator->Draw();
+        
+        // Draw detector components
+        double x_scale = 0.80;
+        double x_offset = 0.15;
+        
+        // Trackers (blue)
+        for (double pos : layout.trackers) {
+            double x = x_offset + (pos - min_pos) / (max_pos - min_pos) * x_scale;
+            TBox *box = new TBox(x - 0.008, y_center - 0.015, x + 0.008, y_center + 0.015);
+            box->SetFillColor(kBlue);
+            box->SetLineColor(kBlue);
+            box->Draw();
+        }
+        
+        // Pizzas (red)
+        for (double pos : layout.pizzas) {
+            double x = x_offset + (pos - min_pos) / (max_pos - min_pos) * x_scale;
+            TBox *box = new TBox(x - 0.008, y_center - 0.015, x + 0.008, y_center + 0.015);
+            box->SetFillColor(kRed);
+            box->SetLineColor(kRed);
+            box->Draw();
+        }
+        
+        // FRIs (pink/magenta)
+        for (double pos : layout.fris) {
+            double x = x_offset + (pos - min_pos) / (max_pos - min_pos) * x_scale;
+            TBox *box = new TBox(x - 0.008, y_center - 0.015, x + 0.008, y_center + 0.015);
+            box->SetFillColor(kMagenta);
+            box->SetLineColor(kMagenta);
+            box->Draw();
+        }
+        
+        // End detector (green)
+        double x = x_offset + (layout.end_detector - min_pos) / (max_pos - min_pos) * x_scale;
+        TBox *box = new TBox(x - 0.008, y_center - 0.015, x + 0.008, y_center + 0.015);
+        box->SetFillColor(kGreen);
+        box->SetLineColor(kGreen);
+        box->Draw();
+    }
+    
+    // Add legend for detector types at bottom
+    double legend_y = 0.08;
+    double legend_x_start = 0.15;
+    double legend_spacing = 0.18;
+    
+    // Tracker legend
+    TBox *t_box = new TBox(legend_x_start, legend_y, legend_x_start + 0.02, legend_y + 0.03);
+    t_box->SetFillColor(kBlue);
+    t_box->Draw();
+    TText *t_text = new TText(legend_x_start + 0.03, legend_y + 0.015, "Tracker");
+    t_text->SetTextSize(0.03);
+    t_text->Draw();
+    
+    // Pizza legend
+    TBox *p_box = new TBox(legend_x_start + legend_spacing, legend_y, legend_x_start + legend_spacing + 0.02, legend_y + 0.03);
+    p_box->SetFillColor(kRed);
+    p_box->Draw();
+    TText *p_text = new TText(legend_x_start + legend_spacing + 0.03, legend_y + 0.015, "Pizza");
+    p_text->SetTextSize(0.03);
+    p_text->Draw();
+    
+    // FRI legend
+    TBox *f_box = new TBox(legend_x_start + 2*legend_spacing, legend_y, legend_x_start + 2*legend_spacing + 0.02, legend_y + 0.03);
+    f_box->SetFillColor(kMagenta);
+    f_box->Draw();
+    TText *f_text = new TText(legend_x_start + 2*legend_spacing + 0.03, legend_y + 0.015, "FRI");
+    f_text->SetTextSize(0.03);
+    f_text->Draw();
+    
+    // End detector legend
+    TBox *e_box = new TBox(legend_x_start + 3*legend_spacing, legend_y, legend_x_start + 3*legend_spacing + 0.02, legend_y + 0.03);
+    e_box->SetFillColor(kGreen);
+    e_box->Draw();
+    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "End");
+    e_text->SetTextSize(0.03);
+    e_text->Draw();
+}
 
 void KLong_plot_compare_resolution() {
-    // Define multiple files to compare - add your file paths here
-    std::vector<std::string> filenames = {
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-580_T4-590_P1-215_P2-230_F1-260_F2-270_E1-600/T1-240_T2-250_T3-580_T4-590_P1-215_P2-230_F1-260_F2-270_E1-600_combined_vectors.root",
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700_combined_vectors.root",
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-280_T4-290_P1-215_P2-230_F1-260_F2-270_E1-600/T1-240_T2-250_T3-280_T4-290_P1-215_P2-230_F1-260_F2-270_E1-600_combined_vectors.root",
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-580_T4-590_P1-215_P2-230_F1-400_F2-410_E1-600/T1-240_T2-250_T3-580_T4-590_P1-215_P2-230_F1-400_F2-410_E1-600_combined_vectors.root"
-        // Add more file paths here as needed
-    };
+    // Automatically find all combined vectors files
+    std::string results_dir = "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS";
+    std::vector<std::string> filenames;
+    
+    TSystemDirectory dir(results_dir.c_str(), results_dir.c_str());
+    TList *files = dir.GetListOfFiles();
+    
+    if (files) {
+        TSystemFile *file;
+        TString fname;
+        TIter next(files);
+        
+        while ((file = (TSystemFile*)next())) {
+            fname = file->GetName();
+            if (!file->IsDirectory() || fname == "." || fname == "..") continue;
+            
+            // Check if this directory contains a combined vectors file
+            std::string config_dir = results_dir + "/" + fname.Data();
+            std::string combined_file = config_dir + "/" + fname.Data() + "_combined_vectors.root";
+            
+            // Check if file exists
+            if (gSystem->AccessPathName(combined_file.c_str()) == 0) {
+                filenames.push_back(combined_file);
+            }
+        }
+    }
+    
+    // Sort filenames for consistent ordering
+    std::sort(filenames.begin(), filenames.end());
+    
+    std::cout << "Found " << filenames.size() << " combined vectors files:" << std::endl;
+    for (const auto& f : filenames) {
+        std::cout << "  " << f << std::endl;
+    }
+    
+    if (filenames.empty()) {
+        std::cout << "No combined vectors files found in " << results_dir << std::endl;
+        return;
+    }
 
     // Extract configuration labels from filenames
     std::vector<std::string> config_labels;
@@ -133,12 +343,12 @@ void KLong_plot_compare_resolution() {
             delete proj;
         }
         
-        // Style the histogram for outlined bars (no fill)
-        h_mean->SetFillStyle(0); // No fill - hollow bars
+        // Style the histogram as a line graph
         h_mean->SetLineColor(colors[file_idx % colors.size()]);
-        h_mean->SetLineWidth(3); // Thick outline
-        h_mean->SetBarWidth(0.8);
-        h_mean->SetBarOffset(0.1);
+        h_mean->SetLineWidth(3);
+        h_mean->SetMarkerColor(colors[file_idx % colors.size()]);
+        h_mean->SetMarkerStyle(20 + file_idx); // Different marker style for each
+        h_mean->SetMarkerSize(1.2);
         
         h_mean_vec.push_back(h_mean);
         
@@ -151,84 +361,33 @@ void KLong_plot_compare_resolution() {
         return;
     }
     
-    // Draw histograms
+    // Draw histograms as line graphs
     gStyle->SetOptStat(0); // Turn off statistics box
     
     // Set up the first histogram
     h_mean_vec[0]->SetTitle("Kaon Momentum Resolution Comparison");
     h_mean_vec[0]->GetYaxis()->SetRangeUser(0, 0.5); // Adjust range as needed
-    h_mean_vec[0]->Draw("BAR");
+    h_mean_vec[0]->Draw("HIST L"); // Draw as histogram line
     
     // Draw additional histograms
     for (size_t i = 1; i < h_mean_vec.size(); ++i) {
-        h_mean_vec[i]->Draw("BAR SAME");
+        h_mean_vec[i]->Draw("HIST L SAME"); // Draw as histogram line on same axes
     }
     
-    // Switch to right pad for legend
+    // Switch to right pad for detector layout visualization
     c1->cd(2);
     
-    // Function to wrap text into multiple lines after P1 and P2 (pizza parameters)
-    auto wrapTextToLines = [](const std::string& text, size_t maxWidth) -> std::vector<std::string> {
-        std::vector<std::string> lines;
-        std::istringstream words(text);
-        std::string word;
-        std::string currentLine = "";
-        bool foundP1 = false, foundP2 = false;
-        
-        while (words >> word) {
-            if (currentLine.empty()) {
-                currentLine = word;
-            } else {
-                std::string testLine = currentLine + " " + word;
-                
-                // Track if we've seen P1 and P2 parameters
-                if (word == "P1") foundP1 = true;
-                if (word == "P2") foundP2 = true;
-                
-                // Check if we should force a break after both pizza parameters (P1 and P2)
-                bool shouldBreakAfterPizzas = false;
-                if (foundP1 && foundP2 && (word == "F1" || word.find("F1") == 0)) {
-                    shouldBreakAfterPizzas = true;
-                }
-                
-                if (testLine.length() <= maxWidth && !shouldBreakAfterPizzas) {
-                    currentLine = testLine;
-                } else {
-                    lines.push_back(currentLine);
-                    currentLine = word;
-                }
-            }
-        }
-        if (!currentLine.empty()) {
-            lines.push_back(currentLine);
-        }
-        
-        return lines;
-    };
-    
-    // Clear the pad and set up for manual drawing
+    // Clear the pad
     gPad->Clear();
-    gPad->Range(0, 0, 1, 1);
     
-    // Draw simple legend with smaller text positioned to the left
-    double y_start = 0.9;
-    double y_step = 0.8 / h_mean_vec.size();  // Distribute entries evenly
-    
+    // Collect line colors
+    std::vector<int> line_colors;
     for (size_t i = 0; i < h_mean_vec.size(); ++i) {
-        double entry_y = y_start - i * y_step;
-        
-        // Draw the color line indicator
-        TLine *colorLine = new TLine(0.01, entry_y, 0.08, entry_y);
-        colorLine->SetLineColor(h_mean_vec[i]->GetLineColor());
-        colorLine->SetLineWidth(3);
-        colorLine->Draw();
-        
-        // Draw text with smaller size and positioned further left
-        TText *text = new TText(0.10, entry_y, config_labels[i].c_str());
-        text->SetTextSize(0.025);  // Smaller text size
-        text->SetTextColor(kBlack);
-        text->Draw();
+        line_colors.push_back(h_mean_vec[i]->GetLineColor());
     }
+    
+    // Draw detector layouts
+    drawDetectorLayout(config_labels, line_colors, 0, 1, 0, 1);
     
     // Switch back to left pad
     c1->cd(1);

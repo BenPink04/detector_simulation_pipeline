@@ -1,7 +1,0 @@
-/control/verbose 2
-
-/run/numberOfThreads 4
-
-/run/initialize
-
-/run/beamOn 100000

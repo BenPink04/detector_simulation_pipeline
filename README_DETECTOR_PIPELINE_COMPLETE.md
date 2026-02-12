@@ -33,6 +33,14 @@ Build → Simulate → Parse → Combine → Analyze → Histograms
 - **F1, F2**: FRI detector positions (cm)
 - **E1**: Electromagnetic calorimeter position (cm)
 
+**Disabling Detectors**: Set any detector position to `0` to disable it
+- Example: `./detector_simulation_master.sh 240 250 680 690 0 0 260 270 700`
+  - This disables both pizza detectors (P1=0, P2=0) while keeping all other components
+- Disabled components are excluded from geometry construction
+- Parsing scripts handle missing detectors gracefully
+- Acceptance rates naturally reflect reduced detector coverage
+- Layout visualization shows only active components
+
 ---
 
 ## 🛠️ Core Components
@@ -54,8 +62,20 @@ Build → Simulate → Parse → Combine → Analyze → Histograms
 
 **Example**:
 ```bash
+# Standard configuration with all detectors
 ./detector_simulation_master.sh 240 250 570 580 215 230 260 270 600
+
+# Disable pizza detectors (P1=0, P2=0)
+./detector_simulation_master.sh 240 250 680 690 0 0 260 270 700
+
+# Minimal setup: trackers and TOF only (no pizzas or FRI walls)
+./detector_simulation_master.sh 240 250 680 690 0 0 0 0 700
 ```
+
+**Position Requirements**:
+- Active detectors: Must be positioned > 210 cm (beyond dipole magnet at z=0-200cm)
+- Disabled detectors: Set position to `0`
+- Configuration string includes all values: `T1-240_T2-250_T3-680_T4-690_P1-0_P2-0_F1-260_F2-270_E1-700`
 
 #### `overnight_pipeline.sh`
 **Purpose**: Automated end-to-end execution with histogram generation

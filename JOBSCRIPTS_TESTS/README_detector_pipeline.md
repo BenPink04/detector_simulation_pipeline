@@ -56,7 +56,7 @@ This creates configuration: `T1-50_T2-60_T3-130_T4-140_P1-15_P2-30_F1-90_F2-100_
 - Total time: ~4 hours for all runs (same as single run!)
 
 ### Step 4: Data Parsing Jobs (100 files)
-- Creates 10 parsing jobscripts, each processing 10 files
+- Creates 100 parsing jobscripts, each processing 1 file
 - Runs `KLong_save_momentum_acceptance.C` and `KLong_save_vectors.C`
 - Creates acceptance and vector output files for each simulation
 - Waits for all run jobs to complete before starting
@@ -97,7 +97,7 @@ Build 1 → Build 2 → ... → Build 100 (sequential chain)
 Run 1     Run 2     ...    Run 100    (parallel, each depends on its own build)
    └─────────┴───────────────┘
               ↓
-   Parsing Jobs (1-10, parallel, wait for all runs)
+  Parsing Jobs (1-100, parallel, wait for all runs)
               ↓
       Combination Job (sequential)
 ```
@@ -131,7 +131,7 @@ ls *.log *.err
 |----------|------|------|--------|-------|-------|
 | Build | 10 min | 4 | 2GB | 100 | Sequential chain |
 | Run | 4 hours | 4 | 4GB | 100 | Parallel execution |
-| Parsing | 1d23h | 10 | 4GB | 10 | 10 files per job |
+| Parsing | 12 hours | 4 | 4GB | 100 | 1 file per job |
 | Combination | 1 hour | 1 | 4GB | 1 | Sequential |
 
 ### Geometry Constraints
@@ -159,6 +159,17 @@ ls *.log *.err
 2. Check that simulation output files exist in results directory
 3. Verify parsing scripts are in the parsing directory
 4. Review parsing job logs: `Parse_*-*.log`
+
+### If parsing jobs are very slow (high statistics):
+**Cause**: Older parsing macros scanned `Ntuple3` and `Ntuple1` *inside* the per‑event loop, which scales roughly as $O(N_{events} \times N_{entries})$ and becomes extremely slow at high statistics.
+
+**Fix**: The macros now build per‑event indexes once and reuse them:
+- Per‑event truth map from `Ntuple1`
+- Per‑event hit summaries from `Ntuple3`
+
+This reduces the runtime to roughly linear in the number of entries.
+
+**Important**: Parsing jobs now copy the latest macros from [VIKING_FOLDER/DATA_PARSING](VIKING_FOLDER/DATA_PARSING) into the configuration’s parsing directory at job start, so updated performance fixes are always used.
 
 ### If combination fails:
 1. Check that all acceptance and vector files exist
@@ -211,8 +222,8 @@ done
 ### Run parsing after simulations complete:
 ```bash
 # Submit parsing jobs manually with appropriate dependencies
-for group in {1..10}; do
-    sbatch temp_jobs/parse_group_${group}_{CONFIG}.job
+for file_num in {1..100}; do
+  sbatch temp_jobs/parse_file_${file_num}_{CONFIG}.job
 done
 ```
 

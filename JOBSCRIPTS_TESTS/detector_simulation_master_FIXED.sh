@@ -37,19 +37,23 @@ MIN_DETECTOR_POS=210  # Minimum safe detector position
 
 echo "=== Geometry Validation ==="
 echo "Dipole magnet extends from z=0 to z=${DIPOLE_END}cm"
-echo "Minimum detector position: z>${MIN_DETECTOR_POS}cm"
+echo "Minimum detector position: z>${MIN_DETECTOR_POS}cm (or 0 to disable)"
 
-# Check all positions are safe
+# Check all positions are safe (0 means disabled, otherwise must be > MIN_DETECTOR_POS)
 ALL_POSITIONS=($T1 $T2 $T3 $T4 $P1 $P2 $F1 $F2 $E1)
 POSITION_NAMES=("T1" "T2" "T3" "T4" "P1" "P2" "F1" "F2" "E1")
 
 for i in ${!ALL_POSITIONS[@]}; do
     pos=${ALL_POSITIONS[i]}
     name=${POSITION_NAMES[i]}
-    if (( $(echo "$pos <= $MIN_DETECTOR_POS" | bc -l) )); then
+    if [ "$pos" -eq 0 ]; then
+        echo "  $name: DISABLED (position = 0)"
+    elif (( $(echo "$pos <= $MIN_DETECTOR_POS" | bc -l) )); then
         echo "ERROR: $name position ($pos cm) is too close to dipole magnet!"
-        echo "       Must be > $MIN_DETECTOR_POS cm to avoid geometry overlaps"
+        echo "       Must be 0 (disabled) or > $MIN_DETECTOR_POS cm to avoid geometry overlaps"
         exit 1
+    else
+        echo "  $name: ENABLED at $pos cm"
     fi
 done
 
@@ -66,7 +70,7 @@ echo "FRI positions (cm): F1=$F1, F2=$F2"
 echo "TOF position (cm): E1=$E1"
 
 # Set paths
-BASE_SCENARIO_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/SCENARIO_5_SIM"
+BASE_SCENARIO_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/BASE_SCENARIO_DIR"
 SCENARIO_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/${CONFIG_STR}"
 DETECTOR_FILE="${BASE_SCENARIO_DIR}/src/JLabKDetectorConstruction.cc"
 BACKUP_FILE="${DETECTOR_FILE}.backup"
@@ -81,13 +85,13 @@ mkdir -p "${LOG_BASE_DIR}/parsing"
 mkdir -p "${LOG_BASE_DIR}/combination"
 mkdir -p "${LOG_BASE_DIR}/histograms"
 mkdir -p "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs"
-echo "📁 Created log directories in ${LOG_BASE_DIR}"
+echo "Created log directories in ${LOG_BASE_DIR}"
 
 # Create simulation directory for this configuration
 echo "Creating simulation directory: $SCENARIO_DIR"
 mkdir -p "$SCENARIO_DIR"
 
-# Copy entire SCENARIO_5_SIM directory to configuration-specific directory
+# Copy entire BASE_SCENARIO_DIR directory to configuration-specific directory
 if [ ! -d "$SCENARIO_DIR/src" ]; then
     echo "Copying simulation files to configuration directory..."
     cp -r "$BASE_SCENARIO_DIR"/* "$SCENARIO_DIR/"
@@ -100,6 +104,11 @@ fi
 mkdir -p "$RESULTS_DIR"
 mkdir -p "$PARSING_DIR"
 mkdir -p "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs"
+
+# Copy ROOT parsing scripts to configuration-specific parsing directory
+echo "Copying ROOT parsing scripts to $PARSING_DIR"
+cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_momentum_acceptance.C" "$PARSING_DIR/"
+cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_vectors.C" "$PARSING_DIR/"
 
 # Update detector file path to use configuration-specific directory
 DETECTOR_FILE="${SCENARIO_DIR}/src/JLabKDetectorConstruction.cc"
@@ -195,8 +204,9 @@ cat > "${SCENARIO_DIR}/batch.mac" << 'EOF'
 # Initialize the run
 /run/initialize
 
-# Run simulation with specified number of events (1M total = 100 jobs × 10,000 events)
-/run/beamOn 10000
+# Run simulation with specified number of events (10M total = 100 jobs × 100000 events)
+# 6000 kaon events per second so 25M takes ~70 minutes beamtime in real pipeline
+/run/beamOn 100000
 EOF
 
 echo "Created batch.mac for headless simulation"
@@ -278,7 +288,7 @@ create_run_jobscript() {
 #!/usr/bin/env bash
 #SBATCH --job-name=Run_${CONFIG_STR}_${run_num}
 #SBATCH --partition=nodes
-#SBATCH --time=2-00:00:00
+#SBATCH --time=0-04:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=4G
@@ -355,102 +365,98 @@ for run in $(seq 1 100); do
     create_run_jobscript $run
 done
 
-echo "=== Step 4: Creating data parsing jobscripts ==="
-
-# Copy parsing scripts to parsing directory
-cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_momentum_acceptance.C" "$PARSING_DIR/"
-cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_vectors.C" "$PARSING_DIR/"
-
 # Function to create parsing jobscript
 create_parsing_jobscript() {
-    local group_start=$1
-    local group_end=$2
-    local group_num=$3
+    local file_num=$1
     
-    local jobscript="/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_group_${group_num}_${CONFIG_STR}.job"
+    local jobscript="/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_${file_num}_${CONFIG_STR}.job"
     
     cat > "$jobscript" << EOF
 #!/usr/bin/env bash
-#SBATCH --job-name=Parse_${CONFIG_STR}_G${group_num}
+#SBATCH --job-name=Parse_${CONFIG_STR}_F${file_num}
 #SBATCH --partition=nodes
-#SBATCH --time=1-23:00:00
+#SBATCH --time=0-04:00:00
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=4G
 #SBATCH --account=pet-hadron-2019
-#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-type=FAIL
 #SBATCH --mail-user=bp969@york.ac.uk
-#SBATCH --output=${LOG_BASE_DIR}/parsing/Parse_${CONFIG_STR}_G${group_num}_%j.log
-#SBATCH --error=${LOG_BASE_DIR}/parsing/Parse_${CONFIG_STR}_G${group_num}_%j.err
+#SBATCH --output=${LOG_BASE_DIR}/parsing/Parse_${CONFIG_STR}_F${file_num}_%j.log
+#SBATCH --error=${LOG_BASE_DIR}/parsing/Parse_${CONFIG_STR}_F${file_num}_%j.err
 
 set -e
 
-echo "Starting parsing group ${group_num} (files ${group_start}-${group_end})"
+echo "Starting parsing of file ${file_num}"
 
 module purge
 module load ROOT/6.30.06-foss-2023a
 
 cd ${PARSING_DIR}
 
-# Wait for simulation files to be ready
-echo "Checking for simulation files..."
-for i in \$(seq ${group_start} ${group_end}); do
-    INPUT_FILE="${RESULTS_DIR}/${CONFIG_STR}_\${i}.root"
-    while [ ! -f "\$INPUT_FILE" ]; do
-        echo "Waiting for \$INPUT_FILE..."
-        sleep 30
-    done
+# Wait for simulation file to be ready
+INPUT_FILE="${RESULTS_DIR}/${CONFIG_STR}_${file_num}.root"
+echo "Checking for simulation file: \$INPUT_FILE"
+while [ ! -f "\$INPUT_FILE" ]; do
+    echo "Waiting for \$INPUT_FILE..."
+    sleep 30
 done
 
-# Parallel parsing (restored - plotting script fix resolved the data access issue)
-for i in \$(seq ${group_start} ${group_end}); do
-    (
-        INPUT_FILE="${RESULTS_DIR}/${CONFIG_STR}_\${i}.root"
-        ACCEPTANCE_OUTPUT="${RESULTS_DIR}/${CONFIG_STR}_\${i}_acceptance.root"
-        VECTORS_OUTPUT="${RESULTS_DIR}/${CONFIG_STR}_\${i}_vectors.root"
-        
-        echo "Processing file \$i: \$INPUT_FILE"
-        
-        # Run acceptance analysis (creates output in RESULTS_DIR)
-        root -l -b -q "KLong_save_momentum_acceptance.C(\"\$INPUT_FILE\")"
-        
-        # Run vector analysis (creates output in RESULTS_DIR)
-        root -l -b -q "KLong_save_vectors.C(\"\$INPUT_FILE\")"
-        
-        # Check that output files were created (they're already in RESULTS_DIR)
-        if [ -f "\$ACCEPTANCE_OUTPUT" ]; then
-            echo "Confirmed \$ACCEPTANCE_OUTPUT created successfully"
-        else
-            echo "ERROR: Expected output file \$ACCEPTANCE_OUTPUT not created!"
-        fi
-        
-        if [ -f "\$VECTORS_OUTPUT" ]; then
-            echo "Confirmed \$VECTORS_OUTPUT created successfully"
-        else
-            echo "ERROR: Expected output file \$VECTORS_OUTPUT not created!"
-        fi
-        
-        echo "Completed parsing for file \$i"
-        # Cleanup: remove raw simulation file after successful parsing (if enabled)
-        if [ "$CLEANUP_ON_SUCCESS" = true ] && [ -f "\$INPUT_FILE" ]; then
-            echo "Removing raw simulation file: \$INPUT_FILE"
-            rm -f "\$INPUT_FILE"
-        fi
-    ) &
-done
+# Parse single file 
+ACCEPTANCE_OUTPUT="${RESULTS_DIR}/${CONFIG_STR}_${file_num}_acceptance.root"
+VECTORS_OUTPUT="${RESULTS_DIR}/${CONFIG_STR}_${file_num}_vectors.root"
 
-wait
-echo "Completed parsing group ${group_num}"
+echo "Processing file ${file_num}: \$INPUT_FILE"
+
+# Copy input file to parsing directory since ROOT scripts expect it in current dir
+INPUT_FILENAME="${CONFIG_STR}_${file_num}.root"
+cp "\$INPUT_FILE" "\$INPUT_FILENAME"
+
+# Run acceptance analysis (creates output in current dir, then move to RESULTS_DIR)
+root -l -b -q "KLong_save_momentum_acceptance.C(\"\$INPUT_FILENAME\")"
+
+# Run vector analysis (creates output in current dir, then move to RESULTS_DIR)  
+root -l -b -q "KLong_save_vectors.C(\"\$INPUT_FILENAME\")"
+
+# Move output files to results directory
+mv "${CONFIG_STR}_${file_num}_acceptance.root" "\$ACCEPTANCE_OUTPUT" 2>/dev/null || true
+mv "${CONFIG_STR}_${file_num}_vectors.root" "\$VECTORS_OUTPUT" 2>/dev/null || true
+
+# Clean up copied input file
+rm -f "\$INPUT_FILENAME"
+
+# Check that output files were created (they're already in RESULTS_DIR)
+if [ -f "\$ACCEPTANCE_OUTPUT" ]; then
+    echo "Confirmed \$ACCEPTANCE_OUTPUT created successfully"
+else
+    echo "ERROR: Expected output file \$ACCEPTANCE_OUTPUT not created!"
+    exit 1
+fi
+
+if [ -f "\$VECTORS_OUTPUT" ]; then
+    echo "Confirmed \$VECTORS_OUTPUT created successfully"  
+else
+    echo "ERROR: Expected output file \$VECTORS_OUTPUT not created!"
+    exit 1
+fi
+
+echo "Completed parsing for file ${file_num}"
+
+# Cleanup: remove raw simulation file after successful parsing (if enabled)
+if [ "$CLEANUP_ON_SUCCESS" = true ] && [ -f "\$INPUT_FILE" ]; then
+    echo "Removing raw simulation file: \$INPUT_FILE"
+    rm -f "\$INPUT_FILE"
+fi
+
+echo "Successfully completed parsing file ${file_num}"
 EOF
 
     echo "Created parsing jobscript: $jobscript"
 }
 
-# Create 10 parsing jobscripts (10 files per script)
-for group in $(seq 1 10); do
-    start=$(( (group-1)*10 + 1 ))
-    end=$(( group*10 ))
-    create_parsing_jobscript $start $end $group
+# Create 100 individual parsing jobscripts (1 file per script)
+for file_num in $(seq 1 100); do
+    create_parsing_jobscript $file_num
 done
 
 echo "=== Step 5: Creating combination jobscript ==="
@@ -543,7 +549,7 @@ find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Combine_${CONFIG_STR}*.err" -d
 echo "Removing temporary job scripts for ${CONFIG_STR}..."
 rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_*_${CONFIG_STR}.job || true
 rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_*_${CONFIG_STR}.job || true
-rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_group_*_${CONFIG_STR}.job || true
+rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_*_${CONFIG_STR}.job || true
 rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job || true
 EOF
 
@@ -596,10 +602,10 @@ RUN_DEPENDENCY=\$(IFS=:; echo "\${RUN_JOB_IDS[*]}")
 # Submit parsing jobs with dependency on all run jobs
 echo "Submitting parsing jobs (dependent on all run jobs)..."
 PARSE_JOB_IDS=()
-for group in \$(seq 1 10); do
-    JOB_ID=\$(sbatch --dependency=afterok:\$RUN_DEPENDENCY /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_group_\${group}_${CONFIG_STR}.job | awk '{print \$4}')
+for file_num in \$(seq 1 100); do
+    JOB_ID=\$(sbatch --dependency=afterok:\$RUN_DEPENDENCY /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_\${file_num}_${CONFIG_STR}.job | awk '{print \$4}')
     PARSE_JOB_IDS+=(\$JOB_ID)
-    echo "Submitted parsing group \$group: Job ID \$JOB_ID"
+    echo "Submitted parsing file \$file_num: Job ID \$JOB_ID"
 done
 
 # Create dependency string for combination job (wait for all parsing jobs)
@@ -623,6 +629,14 @@ echo "      Total wall time: ~17 minutes (builds) + ~2 days (parallel runs) for 
 echo
 echo "Monitor progress with: squeue -u \$USER"
 echo "Results will be in: ${RESULTS_DIR}"
+
+# Auto-delete this submission script after successful job submission
+echo
+echo "   Auto-deleting submission script: \$0"
+echo "   All jobs have been successfully submitted to the queue."
+echo "   This submission script is no longer needed and will be removed."
+rm -f "\$0"
+echo "   Submission script deleted successfully."
 EOF
 
 chmod +x "/users/bp969/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
@@ -635,7 +649,7 @@ echo "Results directory: $RESULTS_DIR"
 echo "Parsing directory: $PARSING_DIR"
 echo
 echo "FIXED ISSUES:"
-echo "  ✓ Corrected SCENARIO_5_SIM template with proper detector positions"
+echo "  ✓ Corrected BASE_SCENARIO_DIR template with proper detector positions"
 echo "  ✓ Fixed sed patterns to use | delimiters instead of /"
 echo "  ✓ Added verification output to confirm position updates"
 echo "  ✓ Template now starts with correct baseline positions"

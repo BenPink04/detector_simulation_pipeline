@@ -1,8 +1,0 @@
-# Test geometry for overlaps
-/control/verbose 2
-/run/verbose 1
-/event/verbose 0
-/tracking/verbose 0
-
-# Run a small number of events to test for overlaps
-/run/beamOn 5

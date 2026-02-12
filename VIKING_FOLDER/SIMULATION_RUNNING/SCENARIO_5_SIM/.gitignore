@@ -1,7 +1,0 @@
-build
-*.root
-*.log
-*.out
-*.d
-*.pcm
-*.so
