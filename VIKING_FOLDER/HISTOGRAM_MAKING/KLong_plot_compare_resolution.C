@@ -192,35 +192,25 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
 }
 
 void KLong_plot_compare_resolution() {
-    // Automatically find all combined vectors files
-    std::string results_dir = "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS";
-    std::vector<std::string> filenames;
-    
-    TSystemDirectory dir(results_dir.c_str(), results_dir.c_str());
-    TList *files = dir.GetListOfFiles();
-    
-    if (files) {
-        TSystemFile *file;
-        TString fname;
-        TIter next(files);
-        
-        while ((file = (TSystemFile*)next())) {
-            fname = file->GetName();
-            if (!file->IsDirectory() || fname == "." || fname == "..") continue;
-            
-            // Check if this directory contains a combined vectors file
-            std::string config_dir = results_dir + "/" + fname.Data();
-            std::string combined_file = config_dir + "/" + fname.Data() + "_combined_vectors.root";
-            
-            // Check if file exists
-            if (gSystem->AccessPathName(combined_file.c_str()) == 0) {
-                filenames.push_back(combined_file);
-            }
-        }
+    // Find all combined vectors files using system find command
+    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/EARLY_TRACKERS_20260217 -name '*combined_vectors.root' 2>/dev/null | sort";
+    FILE* pipe = popen(findCmd.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "Error: Could not run find command" << std::endl;
+        return;
     }
     
-    // Sort filenames for consistent ordering
-    std::sort(filenames.begin(), filenames.end());
+    std::vector<std::string> filenames;
+    char buffer[512];
+    
+    while (fgets(buffer, sizeof(buffer), pipe)) {
+        std::string filepath(buffer);
+        filepath.erase(std::remove(filepath.begin(), filepath.end(), '\n'), filepath.end());
+        if (!filepath.empty()) {
+            filenames.push_back(filepath);
+        }
+    }
+    pclose(pipe);
     
     std::cout << "Found " << filenames.size() << " combined vectors files:" << std::endl;
     for (const auto& f : filenames) {
@@ -228,28 +218,20 @@ void KLong_plot_compare_resolution() {
     }
     
     if (filenames.empty()) {
-        std::cout << "No combined vectors files found in " << results_dir << std::endl;
+        std::cout << "No combined vectors files found" << std::endl;
         return;
     }
 
     // Extract configuration labels from filenames
     std::vector<std::string> config_labels;
     for (const auto& fname : filenames) {
-        std::string label = "";
-        
-        // Find the last occurrence of the configuration pattern (after the last '/')
+        // Extract config name from filename
         size_t last_slash = fname.find_last_of('/');
         std::string basename = (last_slash != std::string::npos) ? fname.substr(last_slash + 1) : fname;
         
-        size_t start = basename.find("T1-");
-        size_t end = basename.find("_combined_vectors.root");
-        if (start != std::string::npos && end != std::string::npos) {
-            label = basename.substr(start, end - start);
-            // Keep full configuration label (all detector positions)
-            // No truncation - includes T1-T4, P1-P2, F1-F2, E1 positions
-        } else {
-            label = "Config_" + std::to_string(config_labels.size() + 1);
-        }
+        // Remove _combined_vectors.root from the end
+        size_t suffix_pos = basename.find("_combined_vectors.root");
+        std::string label = (suffix_pos != std::string::npos) ? basename.substr(0, suffix_pos) : basename;
         
         config_labels.push_back(label);
     }

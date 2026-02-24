@@ -191,32 +191,25 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
 }
 
 void KLong_plot_compare_acceptance() {
-    // Automatically find all combined acceptance files
-    std::string results_dir = "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS";
+    // Find combined acceptance files using system find command
+    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/EARLY_TRACKERS_20260217 -name '*combined_acceptance.root' 2>/dev/null | sort";
+    FILE* pipe = popen(findCmd.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "Error: Could not run find command" << std::endl;
+        return;
+    }
+    
     std::vector<std::string> filenames;
+    char buffer[512];
     
-    TSystemDirectory dir(results_dir.c_str(), results_dir.c_str());
-    TList *files = dir.GetListOfFiles();
-    
-    if (files) {
-        TSystemFile *file;
-        TString fname;
-        TIter next(files);
-        
-        while ((file = (TSystemFile*)next())) {
-            fname = file->GetName();
-            if (!file->IsDirectory() || fname == "." || fname == "..") continue;
-            
-            // Check if this directory contains a combined acceptance file
-            std::string config_dir = results_dir + "/" + fname.Data();
-            std::string combined_file = config_dir + "/" + fname.Data() + "_combined_acceptance.root";
-            
-            // Check if file exists
-            if (gSystem->AccessPathName(combined_file.c_str()) == 0) {
-                filenames.push_back(combined_file);
-            }
+    while (fgets(buffer, sizeof(buffer), pipe)) {
+        std::string filepath(buffer);
+        filepath.erase(std::remove(filepath.begin(), filepath.end(), '\n'), filepath.end());
+        if (!filepath.empty()) {
+            filenames.push_back(filepath);
         }
     }
+    pclose(pipe);
     
     // Sort filenames for consistent ordering
     std::sort(filenames.begin(), filenames.end());
@@ -227,27 +220,20 @@ void KLong_plot_compare_acceptance() {
     }
     
     if (filenames.empty()) {
-        std::cout << "No combined acceptance files found in " << results_dir << std::endl;
+        std::cout << "No combined acceptance files found" << std::endl;
         return;
     }
 
     // Extract configuration labels from filenames
     std::vector<std::string> config_labels;
     for (const auto& fname : filenames) {
-        std::string label = "";
-        
-        // Find the last occurrence of the configuration pattern (after the last '/')
+        // Extract config name from filename
         size_t last_slash = fname.find_last_of('/');
         std::string basename = (last_slash != std::string::npos) ? fname.substr(last_slash + 1) : fname;
         
-        size_t start = basename.find("T1-");
-        size_t end = basename.find("_combined_acceptance.root");
-        if (start != std::string::npos && end != std::string::npos) {
-            label = basename.substr(start, end - start);
-            // Keep full configuration label (all detector positions)
-        } else {
-            label = "Config_" + std::to_string(config_labels.size() + 1);
-        }
+        // Remove _combined_acceptance.root from the end
+        size_t suffix_pos = basename.find("_combined_acceptance.root");
+        std::string label = (suffix_pos != std::string::npos) ? basename.substr(0, suffix_pos) : basename;
         
         config_labels.push_back(label);
     }
