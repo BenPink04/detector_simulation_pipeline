@@ -223,8 +223,8 @@ G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_o
   // Rotations around the z-axis and a positions of the trackers
   // Order: x, y, u, v (xy then uv orientations)
   G4double trkrPhi[4] = {0.*deg, -90.*deg, 45.*deg, -45.*deg};
-  //G4double trkrPosZ[4] = {50.*cm, 60.*cm, 130.*cm, 140.*cm}; // OLD - too close to dipole
-  G4double trkrPosZ[4] = {240.*cm, 250.*cm, 570.*cm, 580.*cm}; // CORRECTED - proper positions
+  //G4double trkrPosZ[4] = {480.*cm, 490.*cm, 680.*cm, 690.*cm}; // OLD - too close to dipole
+  G4double trkrPosZ[4] = {480.*cm, 490.*cm, 680.*cm, 690.*cm}; // CORRECTED - proper positions
 
   for (G4int i = 0; i < 4; i++)
   {
@@ -303,8 +303,8 @@ G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_o
   // Z position of the pizzas and rotation around the z-axis
   // Reduce number of layers
   G4double pizzaPhi[4] = {15.*deg, 0.*deg, 15.*deg, 0.*deg};
-  //G4double pizzaPosZ[4] = {300.*cm, 325.*cm, 1100.*cm, 1200.*cm};
-  G4double pizzaPosZ[4] = {215.*cm, 230.*cm, 1100.*cm, 1200.*cm};
+  //G4double pizzaPosZ[4] = {455.*cm, 470.*cm, 1100.*cm, 1200.*cm};
+  G4double pizzaPosZ[4] = {455.*cm, 470.*cm, 1100.*cm, 1200.*cm};
 
   
   //  for (G4int i = 0; i < 2; i++)
@@ -663,8 +663,8 @@ G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_o
   
 
   // Position of the FRI wall
-  G4double friPosZ[2] = {260.*cm, 270.*cm};  //replaces downstream pizzas from conceptual design - Position of FRI 
-  //G4double friPosZ[2] = {90.*cm, 100.*cm};  //OLD - too close to dipole
+  G4double friPosZ[2] = {500.*cm, 510.*cm};  //replaces downstream pizzas from conceptual design - Position of FRI 
+  //G4double friPosZ[2] = {500.*cm, 510.*cm};  //OLD - too close to dipole
   G4double friPhi[2] = {0.*deg, 90.*deg}; // Rotation of 2 detectors
 
   // Define the 2 fri walls in an array
@@ -760,7 +760,7 @@ G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_o
 
 
   
-  G4double tofPosZ = 600.*cm;  //replace downstream pizzas
+  G4double tofPosZ = 700.*cm;  //replace downstream pizzas
 
   // Only place TOF wall if position > 0 (0 means disabled)
   if (tofPosZ > 0.*cm)
@@ -818,7 +818,7 @@ G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_o
   pizzaSliceAtt->SetForceSolid(true);
   pizzaSlice_log->SetVisAttributes(pizzaSliceAtt);
 
-  G4VisAttributes* friAtt = new G4VisAttributes(G4Colour(1., 0., 0.61));
+  G4VisAttributes* friAtt = new G4VisAttributes(G4Colour(1., 0., 0.));
   friAtt->SetDaughtersInvisible(false);
   friAtt->SetForceSolid(true);
   friStrip_log->SetVisAttributes(friAtt);

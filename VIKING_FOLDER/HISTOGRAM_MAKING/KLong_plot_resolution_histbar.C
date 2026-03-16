@@ -9,7 +9,7 @@
 
 void KLong_plot_resolution_histbar() {
     std::vector<std::string> filenames = {
-    "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700_combined_vectors.root"
+    "/users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/STANDARD_PIZZA_NEW_4_20260313/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700_combined_vectors.root"
     };
 
     // Extract configuration string from filename

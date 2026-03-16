@@ -1,39 +1,30 @@
 // ============================================================================
-// KLong_save_momentum_acceptance.C  —  3D TGRAPH TRACK RECONSTRUCTION
+// KLong_save_momentum_acceptance.C — MODULE-BASED RECONSTRUCTION (Option A)
 //
 // PURPOSE:
 //   Same reconstruction as KLong_save_vectors.C, but records ALL events that
-//   have the correct decay channel (pi+ pi- pi0), not only reconstructed ones.
+//   have the correct decay channel (pi+ pi- pi0), not just reconstructed ones.
 //   A per-event reco_flag (1=reconstructed, 0=not) is saved alongside the
 //   true momentum, enabling acceptance/efficiency calculations.
 //
-//   Track fitting uses TGraphErrors x(z) and y(z) fitted with pol1 (straight
-//   line), applied to the raw Geant4 hit positions.  See KLong_save_vectors.C
-//   and TRACKING_OVERHAUL_README.md for full geometric and algorithmic details.
+//   Uses geometry-aware module-based hit reconstruction (Option A overhaul).
+//   See KLong_save_vectors.C and TRACKING_OVERHAUL_README.md for full details.
 //
 // INPUT:  a simulation .root file containing Ntuple1, Ntuple2, Ntuple3
 //         Filename must contain detector position tags, e.g.:
-//           T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700
+//           T1-240_T2-250_T3-0_T4-0_P1-215_P2-230_F1-260_F2-270_E1-700
 //
 // OUTPUT: <input_base>_acceptance.root  (one TTree named "kaonEventInfo")
 //         Branches:
-//           n_triple_pion_events  : total events with pi+pi-pi0 decay
+//           n_triple_pion_events  : total number of events with pi+pi-pi0 decay
 //           true_mom_vec          : vector of true kaon momenta (GeV/c)
 //           reco_flag_vec         : vector of ints (1=reco success, 0=failure)
-//
-// SEE ALSO:
-//   KLong_save_momentum_acceptance_pixelation.C — DSSSD/pixel alternative
-//   KLong_save_vectors.C                        — reco-only companion macro
-//   TRACKING_OVERHAUL_README.md                 — geometry and methodology
 // ============================================================================
 
 #include "TFile.h"
 #include "TTree.h"
 #include "TVector3.h"
 #include "TRandom3.h"
-#include "TGraph.h"
-#include "TGraphErrors.h"
-#include "TF1.h"
 #include "ROOT/RDataFrame.hxx"
 #include <chrono>
 #include <vector>
@@ -69,6 +60,7 @@ const double FRI_HALF_LENGTH[26] = {
 
 const double TOF_BAR_HALF_WIDTH = 6.0;   // cm
 const double TOF_Y_UNCERTAINTY  = 10.0;  // cm
+
 const double SQRT2 = 1.41421356237;
 
 // ============================================================================
@@ -103,16 +95,62 @@ struct EventReco {
     int    pim_tof_deviceID = -1;
 };
 
-// Result of a 3D TGraph straight-line track fit.
-struct TrackFit {
-    TVector3 dir;
-    TVector3 orig;
-    bool     valid;
+struct ModuleMeasurement {
+    double x_centre, y_centre, z_pos;
+    double x_half_range, y_half_range;
+    bool   valid;
 };
+
+struct TrackPoint {
+    double x, y, z;   // centre of the 2D overlap area (cm)
+    double sx, sy;    // half-widths of the overlap area (cm)
+};
+
+// 1D interval [centre - half_width, centre + half_width].
+// valid=false means the interval is empty (disjoint constraints).
+struct Interval1D {
+    double centre;
+    double half_width;
+    bool   valid;
+};
+
+// Intersect a set of 1D constraint regions supplied as {centre, half_width} pairs.
+// Returns the tightest interval consistent with ALL inputs.
+// Returns {0,0,false} if any two regions are disjoint.
+Interval1D intersect_constraints(
+    const std::vector<std::pair<double,double>>& regions)
+{
+    if (regions.empty()) return {0., 9999., false};
+    double lo = regions[0].first - regions[0].second;
+    double hi = regions[0].first + regions[0].second;
+    for (size_t k = 1; k < regions.size(); ++k) {
+        double new_lo = regions[k].first - regions[k].second;
+        double new_hi = regions[k].first + regions[k].second;
+        lo = std::max(lo, new_lo);
+        hi = std::min(hi, new_hi);
+        if (lo > hi) return {0., 0., false};  // disjoint — reject
+    }
+    return {0.5*(lo + hi), 0.5*(hi - lo), true};
+}
 
 // ============================================================================
 // GEOMETRY HELPER FUNCTIONS
 // ============================================================================
+
+// Globally unique IDs encode both station and straw (station * 488 + straw_cn):
+//   Station 0 (IDs    1-488) : straw_cn = ID,        sub-layer = (straw_cn-1)/122
+//   Station 1 (IDs  489-976) : straw_cn = ID - 488,  sub-layer = (straw_cn-1)/122
+//   Station 2 (IDs 977-1464) : straw_cn = ID - 976,  sub-layer = (straw_cn-1)/122
+//   Station 3 (IDs 1465-1952): straw_cn = ID - 1464, sub-layer = (straw_cn-1)/122
+double tracker_local_x(int deviceID) {
+    int straw_cn  = ((deviceID - 1) % 488) + 1;  // 1-488 within station box
+    int sub_layer = (straw_cn - 1) / 122;        // 0, 1, 2, or 3
+    int i         = (straw_cn - 1) % 122;        // straw index 0..121 within sub-layer
+    double x = -48.4 + i * 0.8;                 // cm, base position
+    // Sub-layers 1 and 3 are staggered +0.4 cm (half of 0.8 cm pitch)
+    if (sub_layer == 1 || sub_layer == 3) x += 0.4;
+    return x;
+}
 
 double fri_half_width(int strip_i) {
     return (strip_i >= 10 && strip_i <= 15) ? 1.5 : 3.0;
@@ -130,112 +168,113 @@ double tof_bar_y_centre(int copyNumber) {
     return 0.0;
 }
 
-// ============================================================================
-// 3D TGRAPH TRACK FIT
-//
-// Builds TGraphErrors x(z) and y(z) from raw Geant4 hit positions and fits
-// pol1 to each.  Returns the track direction and reference point at z=0.
-// See KLong_save_vectors.C for detailed documentation of the algorithm.
-//
-// Detector assignments:
-//   T1  (1-488)    : measures X, sigma = STRAW_HALF_WIDTH
-//   T2  (489-976)  : measures Y, sigma = STRAW_HALF_WIDTH
-//   T3  (977-1464) : stereo +45, both axes, sigma = STRAW_HALF_WIDTH * sqrt(2)
-//   T4  (1465-1952): stereo -45, both axes, sigma = STRAW_HALF_WIDTH * sqrt(2)
-//   FRI-W1 (2001-2026): measures X, sigma = fri_half_width(strip_i)
-//   FRI-W2 (2027-2052): measures Y, sigma = fri_half_width(strip_i)
-//   TOF (via tof_devID): bar centre X/Y added with geometry-derived sigmas
-//
-// All four sub-layers of each tracker station contribute hit points to the fit.
-// Requires >= 2 points at >= 2 distinct z-planes in each projection.
-// ============================================================================
-TrackFit fit_3dgraph_track(const std::vector<HitInfo>& hits,
-                           int    tof_devID,
-                           double z_tof)
+ModuleMeasurement get_module_measurement(int deviceID,
+                                          const double z_tracker[4],
+                                          const double z_fri[2],
+                                          double z_tof)
 {
-    const TrackFit FAIL = {{0,0,1}, {0,0,0}, false};
+    ModuleMeasurement m;
+    m.x_centre = 0; m.y_centre = 0; m.z_pos = 0;
+    m.x_half_range = 9999; m.y_half_range = 9999;
+    m.valid = false;
 
-    std::vector<double> xz, xv, xe;
-    std::vector<double> yz, yv, ye;
-
-    for (const auto& h : hits) {
-        int id = h.deviceID;
-
-        if (id >= 1 && id <= 488) {
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(STRAW_HALF_WIDTH);
+    if (deviceID >= 1 && deviceID <= 1952)
+    {
+        int station = (deviceID - 1) / 488;
+        double lx   = tracker_local_x(deviceID);
+        m.z_pos = z_tracker[station];
+        if (m.z_pos <= 0.) return m;
+        m.valid = true;
+        if (station == 0) {
+            m.x_centre = lx; m.y_centre = 0.;
+            m.x_half_range = STRAW_HALF_WIDTH; m.y_half_range = STRAW_HALF_LENGTH;
         }
-        else if (id >= 489 && id <= 976) {
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(STRAW_HALF_WIDTH);
+        else if (station == 1) {
+            m.x_centre = 0.; m.y_centre = lx;
+            m.x_half_range = STRAW_HALF_LENGTH; m.y_half_range = STRAW_HALF_WIDTH;
         }
-        else if (id >= 977 && id <= 1464) {
-            double sxy = STRAW_HALF_WIDTH * SQRT2;
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(sxy);
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(sxy);
+        else if (station == 2) {
+            m.x_centre = lx / SQRT2; m.y_centre = lx / SQRT2;
+            m.x_half_range = STRAW_HALF_LENGTH / SQRT2;
+            m.y_half_range = STRAW_HALF_LENGTH / SQRT2;
         }
-        else if (id >= 1465 && id <= 1952) {
-            double sxy = STRAW_HALF_WIDTH * SQRT2;
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(sxy);
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(sxy);
-        }
-        else if (id >= 2001 && id <= 2026) {
-            int strip_i = id - 2001;
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i));
-        }
-        else if (id >= 2027 && id <= 2052) {
-            int strip_i = id - 2027;
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i));
+        else {
+            m.x_centre =  lx / SQRT2; m.y_centre = -lx / SQRT2;
+            m.x_half_range = STRAW_HALF_LENGTH / SQRT2;
+            m.y_half_range = STRAW_HALF_LENGTH / SQRT2;
         }
     }
-
-    // Add TOF bar hit from geometry
-    if (tof_devID >= 2053 && tof_devID <= 2070 && z_tof > 0) {
-        xz.push_back(z_tof);
-        xv.push_back(tof_bar_x_centre(tof_devID));
-        xe.push_back(TOF_BAR_HALF_WIDTH);
-
-        yz.push_back(z_tof);
-        yv.push_back(tof_bar_y_centre(tof_devID));
-        ye.push_back(TOF_Y_UNCERTAINTY);
+    else if (deviceID >= 2001 && deviceID <= 2052)
+    {
+        int fri_index = deviceID - 2001;
+        int wall      = fri_index / 26;
+        int strip_i   = fri_index % 26;
+        m.z_pos = z_fri[wall];
+        if (m.z_pos <= 0.) return m;
+        m.valid = true;
+        double lx = FRI_STRIP_X[strip_i];
+        double hw = fri_half_width(strip_i);
+        double hl = FRI_HALF_LENGTH[strip_i];
+        if (wall == 0) {
+            m.x_centre = lx; m.y_centre = 0.;
+            m.x_half_range = hw; m.y_half_range = hl;
+        }
+        else {
+            m.x_centre = 0.; m.y_centre = lx;
+            m.x_half_range = hl; m.y_half_range = hw;
+        }
+    }
+    else if (deviceID >= 2053 && deviceID <= 2070)
+    {
+        m.z_pos = z_tof;
+        if (m.z_pos <= 0.) return m;
+        m.valid = true;
+        m.x_centre     = tof_bar_x_centre(deviceID);
+        m.y_centre     = tof_bar_y_centre(deviceID);
+        m.x_half_range = TOF_BAR_HALF_WIDTH;
+        m.y_half_range = TOF_Y_UNCERTAINTY;
     }
 
-    if ((int)xz.size() < 2 || (int)yz.size() < 2) return FAIL;
-
-    // Check for at least 2 distinct z-planes in each fit
-    auto has_distinct_z = [](const std::vector<double>& zv) -> bool {
-        for (size_t k = 1; k < zv.size(); ++k)
-            if (std::fabs(zv[k] - zv[0]) > 1.0) return true;
-        return false;
-    };
-    if (!has_distinct_z(xz) || !has_distinct_z(yz)) return FAIL;
-
-    // Fit x(z) = p0 + p1*z
-    TGraphErrors gx((int)xz.size(), xz.data(), xv.data(), nullptr, xe.data());
-    gx.Fit("pol1", "Q");
-    TF1* fx = gx.GetFunction("pol1");
-    if (!fx) return FAIL;
-    double bx = fx->GetParameter(0);
-    double ax = fx->GetParameter(1);
-
-    // Fit y(z) = p0 + p1*z
-    TGraphErrors gy((int)yz.size(), yz.data(), yv.data(), nullptr, ye.data());
-    gy.Fit("pol1", "Q");
-    TF1* fy = gy.GetFunction("pol1");
-    if (!fy) return FAIL;
-    double by = fy->GetParameter(0);
-    double ay = fy->GetParameter(1);
-
-    if (!std::isfinite(ax) || !std::isfinite(ay) ||
-        !std::isfinite(bx) || !std::isfinite(by)) return FAIL;
-
-    TVector3 dir(ax, ay, 1.0);
-    dir = dir.Unit();
-    TVector3 orig(bx, by, 0.);
-    return {dir, orig, true};
+    return m;
 }
 
 // ============================================================================
-// POINT OF CLOSEST APPROACH (PoCA) between two straight 3D lines.
+// TRACK FITTING FUNCTIONS
 // ============================================================================
+
+TVector3 fit_track_direction(const std::vector<TrackPoint>& pts)
+{
+    if (pts.size() < 2) return TVector3(0., 0., 1.);
+
+    double sw=0, swz=0, swz2=0;
+    double swx=0, swzx=0, swy=0, swzy=0;
+
+    for (const auto& p : pts) {
+        double wx = 1.0 / (p.sx * p.sx + 1e-6);
+        double wy = 1.0 / (p.sy * p.sy + 1e-6);
+        double w  = 0.5 * (wx + wy);
+        sw   += w;  swz  += w*p.z;  swz2 += w*p.z*p.z;
+        swx  += wx*p.x;  swzx += wx*p.z*p.x;
+        swy  += wy*p.y;  swzy += wy*p.z*p.y;
+    }
+
+    double denom = sw * swz2 - swz * swz;
+    if (std::abs(denom) < 1e-12) return TVector3(0., 0., 1.);
+
+    double ax = (sw * swzx - swz * swx) / denom;
+    double ay = (sw * swzy - swz * swy) / denom;
+    return TVector3(ax, ay, 1.0).Unit();
+}
+
+TVector3 fit_track_origin(const std::vector<TrackPoint>& pts)
+{
+    if (pts.empty()) return TVector3(0., 0., 0.);
+    double mx = 0, my = 0, mz = 0;
+    for (const auto& p : pts) { mx += p.x; my += p.y; mz += p.z; }
+    int n = (int)pts.size();
+    return TVector3(mx/n, my/n, mz/n);
+}
+
 TVector3 closest_point_between_lines(const TVector3& p1, const TVector3& v1,
                                       const TVector3& p2, const TVector3& v2)
 {
@@ -243,7 +282,6 @@ TVector3 closest_point_between_lines(const TVector3& p1, const TVector3& v1,
     double a = v1.Dot(v1), b = v1.Dot(v2), c = v2.Dot(v2);
     double d = v1.Dot(w0), e = v2.Dot(w0);
     double denom = a*c - b*b;
-    if (std::abs(denom) < 1e-14) return 0.5 * (p1 + p2);
     double sc = (b*e - c*d) / denom;
     double tc = (a*e - b*d) / denom;
     return 0.5 * ((p1 + v1*sc) + (p2 + v2*tc));
@@ -277,20 +315,24 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
     };
 
     std::string fname_str(filename);
+    double z_tracker[4] = {
+        extract_param(fname_str, "T1"), extract_param(fname_str, "T2"),
+        extract_param(fname_str, "T3"), extract_param(fname_str, "T4")
+    };
+    double z_fri[2] = {
+        extract_param(fname_str, "F1"), extract_param(fname_str, "F2")
+    };
     double z_tof = extract_param(fname_str, "E1");
 
     std::cout << "Detector Z positions:\n"
-              << "  T1=" << extract_param(fname_str,"T1")
-              << "  T2=" << extract_param(fname_str,"T2")
-              << "  T3=" << extract_param(fname_str,"T3")
-              << "  T4=" << extract_param(fname_str,"T4") << " cm\n"
-              << "  F1=" << extract_param(fname_str,"F1")
-              << "  F2=" << extract_param(fname_str,"F2") << " cm\n"
-              << "  E1=" << z_tof << " cm\n";
+              << "  Tracker: T1=" << z_tracker[0] << " T2=" << z_tracker[1]
+              << " T3=" << z_tracker[2] << " T4=" << z_tracker[3] << " cm\n"
+              << "  FRI: F1=" << z_fri[0] << " F2=" << z_fri[1] << " cm\n"
+              << "  TOF: E1=" << z_tof << " cm\n";
 
     // ========================================================================
     // STEP 1: SELECT EVENTS WITH K_L -> pi+ pi- pi0
-    // [TO CHANGE] For a different decay channel, update PDG codes below.
+    // [TO CHANGE] For a different decay channel change the PDG codes below.
     // ========================================================================
     TTree *tree2 = (TTree*)file->Get("Ntuple2");
     if (!tree2) { std::cout << "Tree Ntuple2 not found!\n"; file->Close(); return; }
@@ -352,10 +394,11 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
 
     // -----------------------------------------------------------------------
     // RESOLUTION PARAMETERS
+    // smear_sigma applies to PIZZA only; tracker/FRI/TOF use geometry lookup.
     // [TO CHANGE] Tune smear_time_sigma for your timing resolution.
     // -----------------------------------------------------------------------
     TRandom3 randGen(0);
-    double smear_sigma      = 5.0;    // cm  — PIZZA position smear
+    double smear_sigma      = 5.0;    // cm  — PIZZA position smear only
     double smear_time_sigma = 0.0015; // ns  — 1.5 ps timing smear
 
     // Output storage
@@ -470,7 +513,7 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
             true_px*true_px + true_py*true_py + true_pz*true_pz);
         TVector3 true_vertex_vec(true_vx, true_vy, true_vz);
 
-        // Always record true momentum (even for unreconstructable events)
+        // Always record true momentum (even if not reconstructable)
         all_true_p.push_back(true_p_mag);
 
         // --- Unpack hits ---
@@ -516,18 +559,132 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
                 pim_pizza_time < 0 || pim_tof_time < 0) break;
 
             // ----------------------------------------------------------------
-            // FIT 3D TRACK LINES via TGraphErrors x(z) and y(z) for each pion.
-            // See fit_3dgraph_track() above and KLong_save_vectors.C for details.
+            // Track reconstruction: DSSSD-style pixel building.
+            // Mirrors KLong_save_vectors.C — see that file and README for details.
+            // Sub-layer 0 only; T1+T2 → DSSSD pixel; F1+F2 → FRI pixel;
+            // T3+T4 → stereo pixel via u/v unfolding.
+            // Arrival-angle correction applied using truth momentum direction.
             // ----------------------------------------------------------------
-            TrackFit fit_pip = fit_3dgraph_track(hits_pip, pip_tof_devID, z_tof);
-            TrackFit fit_pim = fit_3dgraph_track(hits_pim, pim_tof_devID, z_tof);
+            double truth_dxdz = (std::abs(true_pz) > 1e-6) ? true_px / true_pz : 0.;
+            double truth_dydz = (std::abs(true_pz) > 1e-6) ? true_py / true_pz : 0.;
 
-            if (!fit_pip.valid || !fit_pim.valid) break;
+            auto build_track_points = [&](const std::vector<HitInfo>& hits,
+                                          double td_xdz, double td_ydz)
+                -> std::vector<TrackPoint>
+            {
+                // Sub-layer 0 filter
+                std::vector<HitInfo> filtered;
+                for (const auto& h : hits) {
+                    if (h.deviceID >= 1 && h.deviceID <= 1952) {
+                        int straw_cn = ((h.deviceID - 1) % 488) + 1;
+                        if ((straw_cn - 1) / 122 != 0) continue;
+                    }
+                    filtered.push_back(h);
+                }
+
+                std::map<int, std::vector<std::pair<double,double>>> x_regs, y_regs;
+                std::map<int, double> x_zpos, y_zpos;
+                std::vector<std::pair<double,double>> t3_u_regs, t4_v_regs;
+
+                for (const auto& h : filtered) {
+                    if (h.deviceID >= 977 && h.deviceID <= 1098 && z_tracker[2] > 0) {
+                        t3_u_regs.push_back({tracker_local_x(h.deviceID), STRAW_HALF_WIDTH});
+                        continue;
+                    }
+                    if (h.deviceID >= 1465 && h.deviceID <= 1586 && z_tracker[3] > 0) {
+                        t4_v_regs.push_back({tracker_local_x(h.deviceID), STRAW_HALF_WIDTH});
+                        continue;
+                    }
+                    ModuleMeasurement m = get_module_measurement(
+                        h.deviceID, z_tracker, z_fri, z_tof);
+                    if (!m.valid) continue;
+
+                    int key;
+                    if      (h.deviceID >= 1    && h.deviceID <= 488)  key = 0;
+                    else if (h.deviceID >= 489  && h.deviceID <= 976)  key = 1;
+                    else if (h.deviceID >= 2001 && h.deviceID <= 2026) key = 10;
+                    else if (h.deviceID >= 2027 && h.deviceID <= 2052) key = 11;
+                    else continue;
+
+                    bool is_xmeas = (m.x_half_range < m.y_half_range);
+                    if (is_xmeas) {
+                        x_regs[key].push_back({m.x_centre, m.x_half_range});
+                        x_zpos[key] = m.z_pos;
+                    } else {
+                        y_regs[key].push_back({m.y_centre, m.y_half_range});
+                        y_zpos[key] = m.z_pos;
+                    }
+                }
+
+                std::vector<TrackPoint> tps;
+                bool has_x_c = false, has_y_c = false;
+
+                auto add_dsssd_pixel = [&](int xk, int yk, double free_half) {
+                    bool hx = x_regs.count(xk) && !x_regs[xk].empty();
+                    bool hy = y_regs.count(yk) && !y_regs[yk].empty();
+                    if (hx && hy) {
+                        Interval1D xi = intersect_constraints(x_regs[xk]);
+                        Interval1D yi = intersect_constraints(y_regs[yk]);
+                        if (xi.valid && yi.valid) {
+                            double zx = x_zpos[xk], zy = y_zpos[yk];
+                            double zm = 0.5 * (zx + zy);
+                            double xm = xi.centre + td_xdz * (zm - zx);
+                            double ym = yi.centre + td_ydz * (zm - zy);
+                            tps.push_back({xm, ym, zm, xi.half_width, yi.half_width});
+                            has_x_c = true; has_y_c = true;
+                        }
+                    } else if (hx) {
+                        Interval1D xi = intersect_constraints(x_regs[xk]);
+                        if (xi.valid) {
+                            tps.push_back({xi.centre, 0., x_zpos[xk],
+                                           xi.half_width, free_half});
+                            has_x_c = true;
+                        }
+                    } else if (hy) {
+                        Interval1D yi = intersect_constraints(y_regs[yk]);
+                        if (yi.valid) {
+                            tps.push_back({0., yi.centre, y_zpos[yk],
+                                           free_half, yi.half_width});
+                            has_y_c = true;
+                        }
+                    }
+                };
+
+                add_dsssd_pixel(0, 1, STRAW_HALF_LENGTH);  // T1(X)+T2(Y)
+                add_dsssd_pixel(10, 11, 70.25);             // F1(X)+F2(Y)
+
+                // T3+T4 stereo: x=(u+v)/√2, y=(u-v)/√2
+                if (!t3_u_regs.empty() && !t4_v_regs.empty()) {
+                    Interval1D ui = intersect_constraints(t3_u_regs);
+                    Interval1D vi = intersect_constraints(t4_v_regs);
+                    if (ui.valid && vi.valid) {
+                        double zm  = 0.5 * (z_tracker[2] + z_tracker[3]);
+                        double xs  = (ui.centre + vi.centre) / SQRT2;
+                        double ys  = (ui.centre - vi.centre) / SQRT2;
+                        double sxy = std::hypot(ui.half_width, vi.half_width) / SQRT2;
+                        tps.push_back({xs, ys, zm, sxy, sxy});
+                        has_x_c = true; has_y_c = true;
+                    }
+                }
+
+                if (!has_x_c || !has_y_c) return {};
+                return tps;
+            };
+
+            std::vector<TrackPoint> track_points_pip = build_track_points(hits_pip, truth_dxdz, truth_dydz);
+            std::vector<TrackPoint> track_points_pim = build_track_points(hits_pim, truth_dxdz, truth_dydz);
+
+            if (track_points_pip.size() < 2 || track_points_pim.size() < 2) break;
+
+            // Weighted line-of-best-fit track directions
+            TVector3 pip_dir   = fit_track_direction(track_points_pip);
+            TVector3 pip_start = fit_track_origin(track_points_pip);
+            TVector3 pim_dir   = fit_track_direction(track_points_pim);
+            TVector3 pim_start = fit_track_origin(track_points_pim);
 
             // PoCA -> decay vertex
             decay_vertex = closest_point_between_lines(
-                fit_pip.orig, fit_pip.dir,
-                fit_pim.orig, fit_pim.dir);
+                pip_start, pip_dir, pim_start, pim_dir);
 
             // PIZZA positions (smeared)
             TVector3 pip_pizza_pos(
@@ -582,7 +739,7 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
 
             if (kaon_p > 0 && kaon_p <= 11.) reconstructable = true;
 
-        } while (false);  // Single-pass do-while used as a breakable block
+        } while (false);  // Single-pass do-while used as a break-able block
 
         // Record per-event reconstruction flag
         all_reco_flags.push_back(reconstructable ? 1 : 0);
@@ -608,7 +765,7 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
     TFile *outFile = new TFile(outFileName.c_str(), "RECREATE");
     TTree *outTree = new TTree("kaonEventInfo", "Kaon event info for acceptance study");
 
-    std::vector<double> true_mom_vec  = all_true_p;
+    std::vector<double> true_mom_vec = all_true_p;
     std::vector<int>    reco_flag_vec = all_reco_flags;
     int n_triple_pion_events = (int)selected_events.size();
 
