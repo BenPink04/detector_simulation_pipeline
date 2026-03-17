@@ -445,7 +445,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
     // [TO CHANGE] Set smear_sigma=0 for ideal PIZZA position.
     // -----------------------------------------------------------------------
     TRandom3 randGen(0);
-    double smear_sigma      = 5.0;    // cm  — PIZZA position smear (TOF start)
+    double smear_sigma      = 0.0;    // cm  — PIZZA position smear: set 0 (track extrapolation used instead, see below)
     double smear_time_sigma = 0.0015; // ns  — 1.5 ps timing smear
 
     // [TO CHANGE] Set DEBUG_MODE = false to suppress per-event diagnostics.
@@ -708,39 +708,49 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
             fit_pim.orig, fit_pim.dir);
 
         // ----------------------------------------------------------------
-        // PIZZA hit positions — smeared (TOF start position).
-        // [TO CHANGE] Set smear_sigma=0 for ideal reconstruction.
+        // NEAR-PARALLEL TRACK CUT
+        // At high p_K both pions are nearly collinear; the PoCA denominator
+        // (|v1 x v2|^2) becomes tiny, giving an unreliable vertex and an
+        // incoherent decay time.  Reject events where the opening angle is
+        // less than ~1 degree (cos_opening > 0.9998 ~ cos(1.1 deg)).
         // ----------------------------------------------------------------
-        TVector3 pip_pizza_pos(
-            randGen.Gaus(pip_pizza_x, smear_sigma),
-            randGen.Gaus(pip_pizza_y, smear_sigma),
-            pip_pizza_z
-        );
-        TVector3 pim_pizza_pos(
-            randGen.Gaus(pim_pizza_x, smear_sigma),
-            randGen.Gaus(pim_pizza_y, smear_sigma),
-            pim_pizza_z
-        );
+        double cos_opening = fit_pip.dir.Dot(fit_pim.dir);
+        if (cos_opening > 0.9998) continue;
 
         // ----------------------------------------------------------------
-        // TOF wall hit positions — derived from bar geometry (not raw smear).
-        // X: bar centre exact.  Y: nominal bar Y + Gaussian smear.
-        // [TO CHANGE] Switch to Uniform for flat Y prior if preferred.
+        // TRACK EVALUATION HELPER
+        // Evaluates the fitted straight track at a given z-plane.
+        // f.orig is the reference point at z=0; f.dir is the unit direction.
         // ----------------------------------------------------------------
-        TVector3 pip_tof_pos(
-            tof_bar_x_centre(pip_tof_devID),
-            tof_bar_y_centre(pip_tof_devID) + randGen.Gaus(0., TOF_Y_UNCERTAINTY),
-            z_tof
-        );
-        TVector3 pim_tof_pos(
-            tof_bar_x_centre(pim_tof_devID),
-            tof_bar_y_centre(pim_tof_devID) + randGen.Gaus(0., TOF_Y_UNCERTAINTY),
-            z_tof
-        );
+        auto eval_track_at_z = [](const TrackFit& f, double z) -> TVector3 {
+            double t_param = (z - f.orig.Z()) / f.dir.Z();
+            return f.orig + t_param * f.dir;
+        };
+
+        // ----------------------------------------------------------------
+        // PIZZA hit positions — track-extrapolated to z_pizza.
+        // Replaces the old 5 cm Gaussian smear.  The fitted track has already
+        // been constrained by all tracker + FRI + TOF hits, so its precision
+        // at z_pizza is set by the straw resolution (~0.4 cm) and lever arm,
+        // not by an arbitrary smear.  pip_pizza_z is still used as the z-plane.
+        // ----------------------------------------------------------------
+        TVector3 pip_pizza_pos = eval_track_at_z(fit_pip, pip_pizza_z);
+        TVector3 pim_pizza_pos = eval_track_at_z(fit_pim, pim_pizza_z);
+
+        // ----------------------------------------------------------------
+        // TOF hit positions — track-extrapolated to z_tof.
+        // Makes the path length (PIZZA -> TOF) consistent with the Geant4
+        // arrival time, which records the true hit position.  The old
+        // approach used bar-centre + Gaus(0,10 cm) Y, which was inconsistent
+        // with the real time and introduced a systematic Jensen bias.
+        // ----------------------------------------------------------------
+        TVector3 pip_tof_pos = eval_track_at_z(fit_pip, z_tof);
+        TVector3 pim_tof_pos = eval_track_at_z(fit_pim, z_tof);
 
         // ----------------------------------------------------------------
         // PION VELOCITY  v = path_length / delta_t
-        // [TO CHANGE] Replace Mag() with arc length for curved trajectories.
+        // Both path and time now correspond to the same track-extrapolated
+        // point at z_tof, so v = L/t is self-consistent.
         // ----------------------------------------------------------------
         double pip_track_cm = (pip_tof_pos - pip_pizza_pos).Mag();
         double pim_track_cm = (pim_tof_pos - pim_pizza_pos).Mag();

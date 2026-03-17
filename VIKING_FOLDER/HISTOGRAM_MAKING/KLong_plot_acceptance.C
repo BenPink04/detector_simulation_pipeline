@@ -7,7 +7,7 @@
 
 void KLong_plot_acceptance() {
     std::vector<std::string> filenames = {
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700/T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700_combined_acceptance.root"
+        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-480_T2-490_T3-680_T4-690_P1-455_P2-470_F1-500_F2-510_E1-700/T1-480_T2-490_T3-680_T4-690_P1-455_P2-470_F1-500_F2-510_E1-700_combined_acceptance.root"
         // Add more filenames as needed
     };
 

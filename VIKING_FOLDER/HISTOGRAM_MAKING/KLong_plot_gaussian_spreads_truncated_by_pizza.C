@@ -262,7 +262,7 @@ void KLong_plot_gaussian_spreads_truncated_by_pizza() {
     gSystem->mkdir(output_dir.c_str(), kTRUE);
     
     // Find combined vectors files
-    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/STANDARD_PIZZA_NEW_4_20260313 -name '*combined_vectors.root' 2>/dev/null | sort";
+    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/TGRAPH_TEST_20260316 -name '*combined_vectors.root' 2>/dev/null | sort";
     FILE* pipe = popen(findCmd.c_str(), "r");
     if (!pipe) {
         std::cerr << "Error: Could not run find command" << std::endl;

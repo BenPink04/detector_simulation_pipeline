@@ -818,7 +818,7 @@ G4VSolid* apert = new G4Tubs("Aperture", 0., gdTube_outerRad,    // ← gdTube_o
   pizzaSliceAtt->SetForceSolid(true);
   pizzaSlice_log->SetVisAttributes(pizzaSliceAtt);
 
-  G4VisAttributes* friAtt = new G4VisAttributes(G4Colour(1., 0., 0.));
+  G4VisAttributes* friAtt = new G4VisAttributes(G4Colour(1., 0., 0.61));
   friAtt->SetDaughtersInvisible(false);
   friAtt->SetForceSolid(true);
   friStrip_log->SetVisAttributes(friAtt);

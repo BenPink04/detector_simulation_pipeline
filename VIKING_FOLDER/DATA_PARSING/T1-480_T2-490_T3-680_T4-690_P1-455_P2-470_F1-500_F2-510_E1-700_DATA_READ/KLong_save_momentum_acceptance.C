@@ -355,7 +355,7 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
     // [TO CHANGE] Tune smear_time_sigma for your timing resolution.
     // -----------------------------------------------------------------------
     TRandom3 randGen(0);
-    double smear_sigma      = 5.0;    // cm  — PIZZA position smear
+    double smear_sigma      = 0.0;    // cm  — PIZZA position smear: set 0 (track extrapolation used instead, see below)
     double smear_time_sigma = 0.0015; // ns  — 1.5 ps timing smear
 
     // Output storage
@@ -529,29 +529,24 @@ void KLong_save_momentum_acceptance(const char* filename = "Scenario3_Seed1.root
                 fit_pip.orig, fit_pip.dir,
                 fit_pim.orig, fit_pim.dir);
 
-            // PIZZA positions (smeared)
-            TVector3 pip_pizza_pos(
-                randGen.Gaus(pip_pizza_x, smear_sigma),
-                randGen.Gaus(pip_pizza_y, smear_sigma),
-                pip_pizza_z
-            );
-            TVector3 pim_pizza_pos(
-                randGen.Gaus(pim_pizza_x, smear_sigma),
-                randGen.Gaus(pim_pizza_y, smear_sigma),
-                pim_pizza_z
-            );
+            // Near-parallel track cut: reject near-collinear pion pairs
+            // (unstable PoCA denominator at small opening angles / high p_K)
+            double cos_opening = fit_pip.dir.Dot(fit_pim.dir);
+            if (cos_opening > 0.9998) break;   // cos(1.1 deg) ~ 0.9998
 
-            // TOF positions from bar geometry
-            TVector3 pip_tof_pos(
-                tof_bar_x_centre(pip_tof_devID),
-                tof_bar_y_centre(pip_tof_devID) + randGen.Gaus(0., TOF_Y_UNCERTAINTY),
-                z_tof
-            );
-            TVector3 pim_tof_pos(
-                tof_bar_x_centre(pim_tof_devID),
-                tof_bar_y_centre(pim_tof_devID) + randGen.Gaus(0., TOF_Y_UNCERTAINTY),
-                z_tof
-            );
+            // Track evaluation helper — evaluates fitted track at given z-plane
+            auto eval_track_at_z = [](const TrackFit& f, double z) -> TVector3 {
+                double t_param = (z - f.orig.Z()) / f.dir.Z();
+                return f.orig + t_param * f.dir;
+            };
+
+            // PIZZA positions — track-extrapolated (replaces 5 cm Gaussian smear)
+            TVector3 pip_pizza_pos = eval_track_at_z(fit_pip, pip_pizza_z);
+            TVector3 pim_pizza_pos = eval_track_at_z(fit_pim, pim_pizza_z);
+
+            // TOF positions — track-extrapolated (consistent with Geant4 hit time)
+            TVector3 pip_tof_pos = eval_track_at_z(fit_pip, z_tof);
+            TVector3 pim_tof_pos = eval_track_at_z(fit_pim, z_tof);
 
             // Pion velocities
             double pip_track_cm = (pip_tof_pos - pip_pizza_pos).Mag();
