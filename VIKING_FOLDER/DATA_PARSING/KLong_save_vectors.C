@@ -123,6 +123,7 @@ struct EventReco {
     bool   has_pip_tof = false;
     double pip_tof_time = 0;
     int    pip_tof_deviceID = -1;
+    double pip_tof_x = 0, pip_tof_y = 0, pip_tof_z = 0;
 
     bool   has_pim_pizza = false;
     double pim_pizza_time = 0;
@@ -131,6 +132,7 @@ struct EventReco {
     bool   has_pim_tof = false;
     double pim_tof_time = 0;
     int    pim_tof_deviceID = -1;
+    double pim_tof_x = 0, pim_tof_y = 0, pim_tof_z = 0;
 };
 
 // Result of a 3D TGraph straight-line track fit.
@@ -516,6 +518,13 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
                     ev.has_pip_tof      = true;
                     ev.pip_tof_time     = st;
                     ev.pip_tof_deviceID = id;
+                    // Physically motivated position from bar ID:
+                    //   x ~ Gaus(bar_centre_x, TOF_BAR_HALF_WIDTH)  — which bar fired
+                    //   y ~ Gaus(bar_centre_y, TOF_Y_UNCERTAINTY)   — timing along bar
+                    //   z = bar face position from geometry tag
+                    ev.pip_tof_x = randGen.Gaus(tof_bar_x_centre(id), TOF_BAR_HALF_WIDTH);
+                    ev.pip_tof_y = randGen.Gaus(tof_bar_y_centre(id), TOF_Y_UNCERTAINTY);
+                    ev.pip_tof_z = z_tof;
                 }
             }
         }
@@ -539,6 +548,9 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
                     ev.has_pim_tof      = true;
                     ev.pim_tof_time     = st;
                     ev.pim_tof_deviceID = id;
+                    ev.pim_tof_x = randGen.Gaus(tof_bar_x_centre(id), TOF_BAR_HALF_WIDTH);
+                    ev.pim_tof_y = randGen.Gaus(tof_bar_y_centre(id), TOF_Y_UNCERTAINTY);
+                    ev.pim_tof_z = z_tof;
                 }
             }
         }
@@ -568,6 +580,8 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         double pip_pizza_x = 0, pip_pizza_y = 0, pip_pizza_z = 0;
         double pim_pizza_x = 0, pim_pizza_y = 0, pim_pizza_z = 0;
         double pip_tof_time = -1, pim_tof_time = -1;
+        double pip_tof_x = 0, pip_tof_y = 0, pip_tof_z = 0;
+        double pim_tof_x = 0, pim_tof_y = 0, pim_tof_z = 0;
         int    pip_tof_devID = -1, pim_tof_devID = -1;
         std::vector<HitInfo> hits_pip, hits_pim;
 
@@ -591,10 +605,12 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
             if (ev.has_pip_tof) {
                 pip_tof_time  = ev.pip_tof_time;
                 pip_tof_devID = ev.pip_tof_deviceID;
+                pip_tof_x = ev.pip_tof_x; pip_tof_y = ev.pip_tof_y; pip_tof_z = ev.pip_tof_z;
             }
             if (ev.has_pim_tof) {
                 pim_tof_time  = ev.pim_tof_time;
                 pim_tof_devID = ev.pim_tof_deviceID;
+                pim_tof_x = ev.pim_tof_x; pim_tof_y = ev.pim_tof_y; pim_tof_z = ev.pim_tof_z;
             }
         }
 
@@ -738,14 +754,15 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         TVector3 pim_pizza_pos = eval_track_at_z(fit_pim, pim_pizza_z);
 
         // ----------------------------------------------------------------
-        // TOF hit positions — track-extrapolated to z_tof.
-        // Makes the path length (PIZZA -> TOF) consistent with the Geant4
-        // arrival time, which records the true hit position.  The old
-        // approach used bar-centre + Gaus(0,10 cm) Y, which was inconsistent
-        // with the real time and introduced a systematic Jensen bias.
+        // TOF hit positions — bar-ID-based smeared positions.
+        // x = Gaus(bar_centre_x, TOF_BAR_HALF_WIDTH): which bar was hit;
+        // y = Gaus(bar_centre_y, TOF_Y_UNCERTAINTY): timing along bar;
+        // z = bar face position from filename geometry tag.
+        // These are computed once at hit-collection time (EventReco.pip_tof_x/y/z)
+        // to ensure consistency with the independently smeared TOF time measurement.
         // ----------------------------------------------------------------
-        TVector3 pip_tof_pos = eval_track_at_z(fit_pip, z_tof);
-        TVector3 pim_tof_pos = eval_track_at_z(fit_pim, z_tof);
+        TVector3 pip_tof_pos(pip_tof_x, pip_tof_y, pip_tof_z);
+        TVector3 pim_tof_pos(pim_tof_x, pim_tof_y, pim_tof_z);
 
         // ----------------------------------------------------------------
         // PION VELOCITY  v = path_length / delta_t
