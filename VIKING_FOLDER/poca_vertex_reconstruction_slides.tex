@@ -1,0 +1,296 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+
+% Colour tweaks
+\definecolor{vikingblue}{RGB}{0,51,102}
+\setbeamercolor{frametitle}{bg=vikingblue,fg=white}
+\setbeamercolor{title}{fg=white}
+\setbeamercolor{subtitle}{fg=white}
+\setbeamercolor{author}{fg=white}
+\setbeamercolor{institute}{fg=white}
+\setbeamercolor{date}{fg=white}
+\setbeamercolor{structure}{fg=vikingblue}
+
+\title[PoCA Vertex Reconstruction]{Point of Closest Approach\\Decay Vertex Reconstruction}
+\subtitle{Mathematical Method \& Verification}
+\author{bp969}
+\institute{Viking / KLong}
+\date{March 26, 2026}
+
+\begin{document}
+
+% =============================================================================
+\begin{frame}
+\titlepage
+\end{frame}
+% =============================================================================
+
+% =============================================================================
+\begin{frame}{Overview}
+\tableofcontents
+\end{frame}
+% =============================================================================
+
+\section{Track Parameterisation}
+
+% =============================================================================
+\begin{frame}{Track Parameterisation}
+
+Each pion track is a straight line in 3D — fitted as two independent linear regressions:
+
+\begin{equation*}
+    x(z) = b_x + a_x z, \qquad y(z) = b_y + a_y z
+\end{equation*}
+
+\begin{itemize}
+    \item $a_x = dx/dz$, $a_y = dy/dz$ \quad — \textbf{fitted slopes} (transverse displacement per cm along beam)
+    \item $b_x$, $b_y$ \quad — \textbf{intercepts} (track position at the mathematical anchor $z=0$)
+\end{itemize}
+
+\medskip
+Expressed as a 3D line with unit direction $\vec{d}$ and reference point $\vec{o}$:
+
+\begin{equation*}
+    \vec{d} = (a_x,\; a_y,\; 1)^{\text{unit}}, \qquad
+    \vec{o} = (b_x,\; b_y,\; 0)
+\end{equation*}
+
+\begin{equation*}
+    \vec{r}(s) = \vec{o} + s\,\vec{d}
+\end{equation*}
+
+$s$ is an arc-length parameter in cm — stepping $s$ moves along the track.
+
+\end{frame}
+% =============================================================================
+
+% =============================================================================
+\begin{frame}{Weighted Least-Squares Fit}
+
+Slopes and intercepts found from $N$ hit points $(z_i, x_i)$ using weighted least squares:
+
+\begin{equation*}
+    a_x = \frac{\langle zx \rangle - \langle z \rangle\langle x \rangle}{\langle z^2 \rangle - \langle z \rangle^2},
+    \qquad
+    b_x = \langle x \rangle - a_x\,\langle z \rangle,
+    \qquad
+    \langle f \rangle = \frac{\sum_i w_i f_i}{\sum_i w_i}
+\end{equation*}
+
+Weights $w_i = 1/\sigma_i^2$ use the per-detector resolution:
+
+\medskip
+\begin{center}
+\small
+\begin{tabular}{llcc}
+    \toprule
+    \textbf{Detector} & \textbf{Axis} & $\sigma$ \textbf{(cm)} \\
+    \midrule
+    T1 / T2 (axial straws)     & $X$ or $Y$ only  & 0.40 \\
+    T3 / T4 (stereo $\pm45°$)  & $X$ \& $Y$       & $0.40\sqrt{2} \approx 0.57$ \\
+    FRI inner strips            & $X$ or $Y$       & 1.50 \\
+    FRI outer strips            & $X$ or $Y$       & 3.00 \\
+    TOF bars                    & \multicolumn{2}{c}{\textit{excluded — too imprecise at 460 cm lever arm}} \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\end{frame}
+% =============================================================================
+
+\section{PoCA Derivation}
+
+% =============================================================================
+\begin{frame}{PoCA — Setup}
+
+Two fitted track lines for $\pi^+$ (track 1) and $\pi^-$ (track 2):
+
+\begin{equation*}
+    \vec{r}_1(s) = \vec{p}_1 + s\,\vec{v}_1, \qquad
+    \vec{r}_2(t) = \vec{p}_2 + t\,\vec{v}_2
+\end{equation*}
+
+Goal: find $s$, $t$ that \textbf{minimise} $|\vec{r}_1(s) - \vec{r}_2(t)|$.
+
+\medskip
+Define the inter-track displacement vector and five dot products:
+
+\begin{equation*}
+    \vec{w}_0 = \vec{p}_1 - \vec{p}_2
+\end{equation*}
+
+\begin{align*}
+    a &= \vec{v}_1 \cdot \vec{v}_1 = 1, &
+    b &= \vec{v}_1 \cdot \vec{v}_2 = \cos\theta, &
+    c &= \vec{v}_2 \cdot \vec{v}_2 = 1 \\
+    d &= \vec{v}_1 \cdot \vec{w}_0, &
+    e &= \vec{v}_2 \cdot \vec{w}_0 & &
+\end{align*}
+
+\begin{itemize}
+    \item $\theta$ is the \textbf{opening angle} between the two pion tracks
+    \item $d$, $e$ project the track separation onto each direction vector
+\end{itemize}
+
+\end{frame}
+% =============================================================================
+
+% =============================================================================
+\begin{frame}{PoCA — Solving for Closest Points}
+
+Setting $\partial/\partial s = \partial/\partial t = 0$ of $|\vec{r}_1 - \vec{r}_2|^2$ gives:
+
+\begin{equation*}
+    D = \sin^2\theta = 1 - \cos^2\theta
+\end{equation*}
+
+\begin{equation*}
+    \boxed{s_c = \frac{be - d}{D}, \qquad t_c = \frac{e - bd}{D}}
+\end{equation*}
+
+\medskip
+The two closest points and the \textbf{reconstructed decay vertex}:
+
+\begin{equation*}
+    \vec{q}_1 = \vec{p}_1 + s_c\,\vec{v}_1, \quad
+    \vec{q}_2 = \vec{p}_2 + t_c\,\vec{v}_2, \quad
+    \boxed{\vec{V}_\text{reco} = \tfrac{1}{2}(\vec{q}_1 + \vec{q}_2)}
+\end{equation*}
+
+\medskip
+\textbf{PoCA separation} $\Delta = |\vec{q}_1 - \vec{q}_2|$ — quality indicator:
+\begin{itemize}
+    \item $\Delta \approx 0$ \quad $\Rightarrow$ clean, well-defined vertex
+    \item Large $\Delta$ \quad $\Rightarrow$ near-parallel tracks or poor fit
+    \item $D \to 0$ \quad $\Rightarrow$ tracks parallel, no unique solution (rejected if $D < 10^{-14}$)
+\end{itemize}
+
+\end{frame}
+% =============================================================================
+
+\section{Why \texorpdfstring{$z$}{z} is Hard}
+
+% =============================================================================
+\begin{frame}{Why $z$ Resolution is Poor}
+
+\begin{columns}
+\begin{column}{0.55\textwidth}
+    \begin{itemize}
+        \item $x$, $y$ are \textbf{directly measured} by T1 and T2 straws
+        \item $z$ of the vertex is \textbf{never directly measured} — it comes entirely from track slopes via the PoCA algebra
+    \end{itemize}
+
+    \medskip
+    Error propagation:
+    \begin{equation*}
+        \delta z_\text{vtx} \;\sim\; \frac{\sigma_\text{slope}}{\Delta a^\text{opening}}
+    \end{equation*}
+
+    At high $p_K$, both pions are nearly collinear: $\Delta a^\text{opening} \to 0$ and $\delta z$ diverges.
+\end{column}
+\begin{column}{0.42\textwidth}
+    \begin{center}
+    \small
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Coord.} & $\mu$ (cm) & $\sigma$ (cm) \\
+        \midrule
+        $\delta x$ & $\sim -0.05$ & $\sim 0.4$ \\
+        $\delta y$ & $\sim 0.00$  & $\sim 0.35$ \\
+        $\delta z$ & $\sim +1$--5 & $\sim 7$--12 \\
+        \bottomrule
+    \end{tabular}
+    \end{center}
+
+    \medskip
+    \small $z$ resolution is $\mathbf{20\text{--}30\times}$ worse than transverse. Positive $\mu_z$ bias $\Rightarrow$ vertex $z$ overestimated $\Rightarrow$ kaon momentum \textbf{underestimated}.
+\end{column}
+\end{columns}
+
+\end{frame}
+% =============================================================================
+
+\section{Manual Verification}
+
+% =============================================================================
+\begin{frame}{Selecting a Clean Event}
+
+Enable \texttt{DIAG\_RECO\_MODE = true} in \texttt{KLong\_save\_vectors.C}.\\
+Look for an event satisfying \textbf{all} of:
+
+\medskip
+\begin{center}
+\begin{tabular}{lll}
+    \toprule
+    \textbf{Diagnostic} & \textbf{Output tag} & \textbf{Target} \\
+    \midrule
+    PoCA separation $\Delta$          & \texttt{[1]} & $< 1$ cm \\
+    Back-propagated decay time spread & \texttt{[2]} & $|\text{diff}| < 0.1$ ns \\
+    Vertex $z$ residual               & \texttt{[3]} & $|\delta z| < 5$ cm \\
+    Track slope errors                & \texttt{[4]} & $|\Delta a_x|,|\Delta a_y| < 0.01$ \\
+    Tracker coverage                  & hit counts   & T1, T2, T3, T4 all $> 0$ \\
+    \bottomrule
+\end{tabular}
+\end{center}
+
+\medskip
+From the output, record \texttt{orig} $(b_x, b_y, 0)$ and \texttt{dir} $(d_x, d_y, d_z)$ for each pion track, plus \texttt{reco\_vertex} and \texttt{true\_vertex}.
+
+\end{frame}
+% =============================================================================
+
+% =============================================================================
+\begin{frame}{Step-by-Step Manual Calculation}
+
+Given \texttt{orig} and \texttt{dir} from DIAG output:
+
+\begin{enumerate}
+    \item $\vec{p}_{1,2} = (b_x, b_y, 0)$, \quad $\vec{v}_{1,2} = (a_x, a_y, 1)^\text{unit}$ for $\pi^\pm$
+    \item $\vec{w}_0 = \vec{p}_1 - \vec{p}_2$
+    \item $b = \vec{v}_1 \cdot \vec{v}_2 = \cos\theta$, \quad $D = 1 - b^2 = \sin^2\theta$
+    \item $d = \vec{v}_1 \cdot \vec{w}_0$, \quad $e = \vec{v}_2 \cdot \vec{w}_0$
+    \item $s_c = (be - d)/D$, \quad $t_c = (e - bd)/D$
+    \item $\vec{q}_{1} = \vec{p}_1 + s_c\vec{v}_1$, \quad $\vec{q}_{2} = \vec{p}_2 + t_c\vec{v}_2$
+    \item $\vec{V}_\text{reco} = \tfrac{1}{2}(\vec{q}_1 + \vec{q}_2)$
+\end{enumerate}
+
+\medskip
+\textbf{Check:} result should match \texttt{reco\_vertex} to $\lesssim 10^{-3}$ cm.\\
+Compare to \texttt{true\_vertex} (Geant4 MC truth) to quantify resolution for that event.
+
+\end{frame}
+% =============================================================================
+
+% =============================================================================
+\begin{frame}{Quick-Start: Code Settings}
+
+To print full diagnostics for one event, set in \texttt{KLong\_save\_vectors.C}:
+
+\medskip
+\begin{block}{}
+\texttt{const bool DEBUG\_MODE\phantom{xxx}= true;} \\
+\texttt{const int\phantom{x} DEBUG\_MAX\_EVENTS = 1;} \\
+\texttt{const bool DIAG\_RECO\_MODE\phantom{} = true;} \\
+\texttt{const int\phantom{x} DIAG\_MAX\_EVENTS\phantom{} = 1;}
+\end{block}
+
+\medskip
+Output will include:
+\begin{itemize}
+    \item Per-hit positions at each detector plane
+    \item Fitted \texttt{orig} and \texttt{dir} for $\pi^+$ and $\pi^-$
+    \item 5-item reconstruction diagnostic checklist (\texttt{[1]}--\texttt{[5]})
+    \item \texttt{reco\_vertex} vs \texttt{true\_vertex} comparison
+\end{itemize}
+
+\end{frame}
+% =============================================================================
+
+\end{document}

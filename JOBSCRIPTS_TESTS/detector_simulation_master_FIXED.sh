@@ -105,10 +105,12 @@ mkdir -p "$RESULTS_DIR"
 mkdir -p "$PARSING_DIR"
 mkdir -p "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs"
 
-# Copy ROOT parsing scripts to configuration-specific parsing directory
+# Copy ROOT parsing scripts and DIAG event parser to configuration-specific parsing directory
 echo "Copying ROOT parsing scripts to $PARSING_DIR"
 cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_momentum_acceptance.C" "$PARSING_DIR/"
 cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_vectors.C" "$PARSING_DIR/"
+cp "/users/bp969/scratch/VIKING_FOLDER/HISTOGRAM_MAKING/parse_diag_events.py" "$PARSING_DIR/"
+echo "Copied parse_diag_events.py to $PARSING_DIR"
 
 # Update detector file path to use configuration-specific directory
 DETECTOR_FILE="${SCENARIO_DIR}/src/JLabKDetectorConstruction.cc"
@@ -415,8 +417,16 @@ cp "\$INPUT_FILE" "\$INPUT_FILENAME"
 # Run acceptance analysis (creates output in current dir, then move to RESULTS_DIR)
 root -l -b -q "KLong_save_momentum_acceptance.C(\"\$INPUT_FILENAME\")"
 
-# Run vector analysis (creates output in current dir, then move to RESULTS_DIR)  
-root -l -b -q "KLong_save_vectors.C(\"\$INPUT_FILENAME\")"
+# Run vector analysis and pipe DIAG output through the clean-event parser
+DIAG_LOG="${RESULTS_DIR}/${CONFIG_STR}_${file_num}_diag_clean.txt"
+root -l -b -q "KLong_save_vectors.C(\"\$INPUT_FILENAME\")" 2>&1 | \
+    python3 "${PARSING_DIR}/parse_diag_events.py" --log "\$DIAG_LOG"
+ROOT_EXIT=\${PIPESTATUS[0]}
+if [ \$ROOT_EXIT -ne 0 ]; then
+    echo "ERROR: KLong_save_vectors.C failed (exit code \$ROOT_EXIT) - aborting parse job ${file_num}"
+    exit \$ROOT_EXIT
+fi
+echo "Clean DIAG event summary: \$DIAG_LOG"
 
 # Move output files to results directory
 mv "${CONFIG_STR}_${file_num}_acceptance.root" "\$ACCEPTANCE_OUTPUT" 2>/dev/null || true
