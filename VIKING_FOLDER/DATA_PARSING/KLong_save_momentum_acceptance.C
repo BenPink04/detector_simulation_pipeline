@@ -140,12 +140,12 @@ double tof_bar_y_centre(int copyNumber) {
 // See KLong_save_vectors.C for detailed documentation of the algorithm.
 //
 // Detector assignments:
-//   T1  (1-488)    : measures X, sigma = STRAW_HALF_WIDTH
-//   T2  (489-976)  : measures Y, sigma = STRAW_HALF_WIDTH
-//   T3  (977-1464) : stereo +45, both axes, sigma = STRAW_HALF_WIDTH * sqrt(2)
-//   T4  (1465-1952): stereo -45, both axes, sigma = STRAW_HALF_WIDTH * sqrt(2)
-//   FRI-W1 (2001-2026): measures X, sigma = fri_half_width(strip_i)
-//   FRI-W2 (2027-2052): measures Y, sigma = fri_half_width(strip_i)
+//   T1  (1-488)    : measures X, sigma = 0.04 cm (effective resolution better than half-width due to time info)
+//   T2  (489-976)  : measures Y, sigma = 0.04 cm (effective resolution better than half-width due to time info)
+//   T3  (977-1464) : stereo +45, both axes, sigma = 0.04 * sqrt(2) cm (propagated)
+//   T4  (1465-1952): stereo -45, both axes, sigma = 0.04 * sqrt(2) cm (propagated)
+//   FRI-W1 (2001-2026): measures X, sigma = fri_half_width(strip_i) * 0.5 cm (uniform distribution across strip width -> sigma = half-width * 0.5)
+//   FRI-W2 (2027-2052): measures Y, sigma = fri_half_width(strip_i) * 0.5 cm (uniform distribution across strip width -> sigma = half-width * 0.5)
 //   TOF (via tof_devID): bar centre X/Y added with geometry-derived sigmas
 //
 // All four sub-layers of each tracker station contribute hit points to the fit.
@@ -164,28 +164,28 @@ TrackFit fit_3dgraph_track(const std::vector<HitInfo>& hits,
         int id = h.deviceID;
 
         if (id >= 1 && id <= 488) {
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(STRAW_HALF_WIDTH);
+            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(0.04); // cm  — effective resolution better than half-width due to time info
         }
         else if (id >= 489 && id <= 976) {
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(STRAW_HALF_WIDTH);
+            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(0.04); // cm  — effective resolution better than half-width due to time info
         }
         else if (id >= 977 && id <= 1464) {
-            double sxy = STRAW_HALF_WIDTH * SQRT2;
+            double sxy = 0.04 * SQRT2;
             xz.push_back(h.z); xv.push_back(h.x); xe.push_back(sxy);
             yz.push_back(h.z); yv.push_back(h.y); ye.push_back(sxy);
         }
         else if (id >= 1465 && id <= 1952) {
-            double sxy = STRAW_HALF_WIDTH * SQRT2;
+            double sxy = 0.04 * SQRT2;
             xz.push_back(h.z); xv.push_back(h.x); xe.push_back(sxy);
             yz.push_back(h.z); yv.push_back(h.y); ye.push_back(sxy);
         }
         else if (id >= 2001 && id <= 2026) {
             int strip_i = id - 2001;
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i));
+            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i) * 0.5); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
         }
         else if (id >= 2027 && id <= 2052) {
             int strip_i = id - 2027;
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i));
+            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i) * 0.5); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
         }
         // TOF hits are intentionally excluded from the track fit.
         // The bar centre has large uncertainties (±6 cm in X, ±10 cm in Y)

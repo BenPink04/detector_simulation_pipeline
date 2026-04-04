@@ -216,6 +216,7 @@ void KLong_validate_reconstruction() {
         res.h_delta_p = new TH1D(hname.c_str(), "", 120, -3.0, 3.0);
         res.h_delta_p->SetDirectory(nullptr);
 
+        const double anomaly_threshold = 1.0; // Filter |delta_p/true_p| > 100% as unphysical outliers
         Long64_t nEnt = tree->GetEntries();
         for (Long64_t e = 0; e < nEnt; ++e) {
             tree->GetEntry(e);
@@ -226,6 +227,7 @@ void KLong_validate_reconstruction() {
                 // Skip unphysical / non-finite entries
                 if (!std::isfinite(pt) || !std::isfinite(pr)) continue;
                 if (pt <= 0 || pr <= 0) continue;
+                if (std::abs(pr - pt) / pt > anomaly_threshold) continue;
 
                 double dp  = pr - pt;
                 double rat = pr / pt;

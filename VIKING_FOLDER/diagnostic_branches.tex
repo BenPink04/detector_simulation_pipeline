@@ -1,0 +1,227 @@
+% ============================================================
+%  diagnostic_branches.tex
+%  Fragment: include in a parent document via \input{diagnostic_branches}
+%
+%  Required packages in parent preamble:
+%    \usepackage{amsmath, amssymb, booktabs, array, listings, bm}
+%
+%  Describes the two diagnostic reconstruction branches added to
+%  KLong_save_vectors.C and the dual combined-output logic in
+%  detector_simulation_master_FIXED.sh to isolate the root cause
+%  of the gamma^2 momentum underestimation.
+% ============================================================
+
+\subsection{Diagnostic Reconstruction Branches}
+\label{sec:diagnostic_branches}
+
+To isolate whether the systematic momentum underestimation (Section~\ref{sec:gamma2})
+originates from a bias in the reconstructed decay vertex position or from a bias in the
+reconstructed kaon decay time, two parallel diagnostic momentum estimates were added to
+the reconstruction macro \texttt{KLong\_save\_vectors.C}.  Both branches use the same
+$\gamma^2$-sensitive formula as the standard reconstruction but swap in one truth-level
+quantity at a time, so each branch produces a result that differs from truth only if the
+remaining reconstructed quantity is biased.
+
+\subsubsection{Standard Reconstruction (\texttt{reco\_p})}
+
+The nominal pipeline reconstructs the kaon momentum as follows:
+\begin{enumerate}
+  \item Fit a straight-line track ($\hat{a}$, $\bm{b}$) to each charged-pion hit cluster
+        using weighted least squares on the straw-tracker hits.
+  \item Find the PoCA (Point of Closest Approach) of the two track lines; the midpoint is
+        taken as the reconstructed decay vertex $\bm{x}_{\text{PoCA}}$.
+  \item Back-propagate each pion track from the TOF bar to the PoCA vertex to obtain the
+        pion TOF residual; sum with the production time to obtain the kaon decay time
+        $\Delta t_{\text{reco}}$.
+  \item Compute the flight-path length
+        $L_{\text{reco}} = |\bm{x}_{\text{PoCA}} - \bm{x}_{\text{prod}}|$
+        and hence $\beta_{\text{reco}} = L_{\text{reco}}\,/\,(c\,\Delta t_{\text{reco}})$.
+  \item Apply Eq.~\eqref{eq:p_from_beta} to obtain \texttt{reco\_p}.
+\end{enumerate}
+
+\subsubsection{Diagnostic Branch 1: \texttt{reco\_p\_truez} (truth vertex, reconstructed time)}
+
+This branch replaces $\bm{x}_{\text{PoCA}}$ with the Monte~Carlo truth decay vertex
+$\bm{x}_{\text{true}}$ while keeping $\Delta t_{\text{reco}}$ unchanged:
+\begin{equation}
+  \beta_{\text{tz}} = \frac{|\bm{x}_{\text{true}} - \bm{x}_{\text{prod}}|}
+                          {c\,\Delta t_{\text{reco}}},
+  \qquad
+  p_{\text{tz}} = \frac{m_K\,\beta_{\text{tz}}\,c}{\sqrt{1 - \beta_{\text{tz}}^2}}.
+  \label{eq:p_truez}
+\end{equation}
+
+\textbf{Interpretation.}  If $p_{\text{tz}} \approx p_{\text{true}}$, the PoCA vertex
+$z$-position is the dominant error source and the timing chain is accurate.  If
+$p_{\text{tz}}$ still deviates significantly from $p_{\text{true}}$, then the timing
+chain contributes independently of the vertex, and $p_{\text{tz}}$ provides an upper
+bound on how much vertex-position bias alone accounts for.
+
+The output branch \texttt{reco\_p\_truez} is stored in every per-simulation
+\texttt{\_vectors.root} file alongside \texttt{reco\_p}.
+
+\subsubsection{Diagnostic Branch 2: \texttt{reco\_p\_truet} (reconstructed vertex, truth time)}
+
+This branch keeps $\bm{x}_{\text{PoCA}}$ but replaces $\Delta t_{\text{reco}}$ with the
+Monte~Carlo truth decay time $\Delta t_{\text{true}}$:
+\begin{equation}
+  \beta_{\text{tt}} = \frac{L_{\text{reco}}}{c\,\Delta t_{\text{true}}},
+  \qquad
+  p_{\text{tt}} = \frac{m_K\,\beta_{\text{tt}}\,c}{\sqrt{1 - \beta_{\text{tt}}^2}}.
+  \label{eq:p_truet}
+\end{equation}
+
+\textbf{Interpretation.}  If $p_{\text{tt}} \approx p_{\text{true}}$, the timing chain
+is the dominant error source and the PoCA vertex is geometrically accurate.  Used
+together with the \texttt{reco\_p\_truez} result, the two branches partition the total
+bias into vertex-position and timing-chain contributions, modulo any correlation between
+the two.
+
+\subsubsection{Decomposition of the Total Bias}
+
+Let $\Delta p = p_{\text{reco}} - p_{\text{true}}$ denote the total reconstruction
+bias.  The two branches satisfy:
+\begin{align}
+  \Delta p_{\text{tz}} &= p_{\text{tz}} - p_{\text{true}}
+      &&\text{(vertex error contribution, timing held at truth)},\\
+  \Delta p_{\text{tt}} &= p_{\text{tt}} - p_{\text{true}}
+      &&\text{(timing error contribution, vertex held at truth)}.
+\end{align}
+In the limit of small, uncorrelated errors:
+\begin{equation}
+  \Delta p \approx \Delta p_{\text{tz}} + \Delta p_{\text{tt}}
+  \label{eq:bias_decomp}
+\end{equation}
+(where each $\Delta p$ is itself amplified by $\gamma^2$, as derived in
+Section~\ref{sec:gamma2}).  A significant residual $\Delta p - (\Delta p_{\text{tz}}
++ \Delta p_{\text{tt}})$ would indicate a non-linear coupling between the two error
+sources.
+
+\subsubsection{Changes to \texttt{KLong\_save\_vectors.C}}
+
+The following modifications were made to the reconstruction macro:
+
+\begin{enumerate}
+  \item Two additional \texttt{std::vector<double>} storage objects were declared
+        alongside the existing reconstruction vectors:
+\begin{verbatim}
+std::vector<double> reco_p_truez;   // diagnostic branch 1
+std::vector<double> reco_p_truet;   // diagnostic branch 2
+\end{verbatim}
+
+  \item After the truth-level lookup block (which already queries the Monte~Carlo
+        truth vertex and decay time for validation histograms), two additional
+        computation blocks were inserted.
+
+        \textbf{Branch 1} (\texttt{reco\_p\_truez}):
+\begin{verbatim}
+double kaon_p_truez = -1.;
+{
+    TVector3 vtx_tz(true_vertex_x, true_vertex_y, true_vertex_z);
+    double L_tz = (vtx_tz - prod_vertex).Mag();
+    double beta_tz = L_tz / (c_light * dt_reco);
+    if (beta_tz > 0. && beta_tz < 1.)
+        kaon_p_truez = kaon_mass * beta_tz
+                       / std::sqrt(1. - beta_tz*beta_tz);
+}
+reco_p_truez.push_back(kaon_p_truez);
+\end{verbatim}
+
+        \textbf{Branch 2} (\texttt{reco\_p\_truet}):
+\begin{verbatim}
+double kaon_p_truet = -1.;
+{
+    double beta_tt = L_reco / (c_light * dt_true);
+    if (beta_tt > 0. && beta_tt < 1.)
+        kaon_p_truet = kaon_mass * beta_tt
+                       / std::sqrt(1. - beta_tt*beta_tt);
+}
+reco_p_truet.push_back(kaon_p_truet);
+\end{verbatim}
+
+        Both branches return $-1$ (sentinel) for events where $\beta \geq 1$ or
+        $\beta \leq 0$ after substitution, indicating a pathological combination.
+
+  \item Two new output tree branches were registered:
+\begin{verbatim}
+outTree->Branch("reco_p_truez", &p_reco_tz);
+outTree->Branch("reco_p_truet", &p_reco_tt);
+\end{verbatim}
+\end{enumerate}
+
+\subsubsection{Changes to the Combination Job (\texttt{detector\_simulation\_master\_FIXED.sh})}
+
+\paragraph{Dual combined output files.}
+After the standard \texttt{hadd} step that produces
+\texttt{<CONFIG>\_combined\_vectors.root} (containing all branches including
+\texttt{reco\_p\_truez} and \texttt{reco\_p\_truet}), an inline ROOT macro runs in the
+SLURM combination job to produce a second file:
+
+\begin{verbatim}
+_combined_vectors_truez.root
+\end{verbatim}
+
+This file renames the branches so that the histogram macros — which read \texttt{reco\_p}
+by name — can be run unmodified against the truth-vertex reconstruction:
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  Branch in \texttt{\_truez} file & Source & Meaning \\
+  \midrule
+  \texttt{reco\_p}      & \texttt{reco\_p\_truez} & truth-vertex momentum \\
+  \texttt{reco\_p\_poca}& \texttt{reco\_p}        & original PoCA momentum (preserved) \\
+  \texttt{reco\_p\_truet} & \texttt{reco\_p\_truet} & unchanged \\
+  \texttt{true\_p}, \texttt{true\_vertex\_*}, \texttt{reco\_vertex\_*}
+                        & all unchanged & \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Integration with \texttt{File\_Archiver.sh}.}
+The archiver was updated to copy \texttt{*\_combined\_vectors\_truez.root} alongside
+the standard \texttt{*\_combined\_vectors.root} and
+\texttt{*\_combined\_acceptance.root} files.  The truez file is treated as optional
+(flagged \texttt{[INFO]} if absent) so that archives from earlier simulation runs
+without the diagnostic branches are not marked as incomplete.
+
+\paragraph{Integration with \texttt{KLong\_run\_all.sh}.}
+The plotting and validation script now performs two passes automatically:
+\begin{enumerate}
+  \item \textbf{Pass 1 (standard):} reads \texttt{*\_combined\_vectors.root},
+        writes all output PNGs to \texttt{<outdir>/standard/}.
+  \item \textbf{Pass 2 (truez):} the helper function applies an additional
+        \texttt{sed} substitution replacing \texttt{\_combined\_vectors.root} with
+        \texttt{\_combined\_vectors\_truez.root} in each macro before running it,
+        and writes output to \texttt{<outdir>/truez/}.
+\end{enumerate}
+Pass~2 is skipped with a clear warning if no truez files are present in the archive.
+
+\subsubsection{Expected Diagnostic Outcomes}
+
+\begin{center}
+\begin{tabular}{p{4cm}p{5cm}p{4cm}}
+  \toprule
+  Observation & Interpretation & Next step \\
+  \midrule
+  $p_{\text{tz}} \approx p_{\text{true}}$;\quad $p_{\text{reco}} \ll p_{\text{true}}$
+    & Vertex $z$ bias is dominant; timing chain is accurate
+    & Investigate PoCA $z$-axis systematic \\[6pt]
+  $p_{\text{tt}} \approx p_{\text{true}}$;\quad $p_{\text{reco}} \ll p_{\text{true}}$
+    & Timing chain bias is dominant; vertex is accurate
+    & Investigate TOF calibration / back-propagation \\[6pt]
+  Both $p_{\text{tz}}$ and $p_{\text{tt}}$ biased
+    & Both sources contribute; or a correlated systematic exists
+    & Inspect $\beta$ residuals per-source simultaneously \\[6pt]
+  Both $p_{\text{tz}}$ and $p_{\text{tt}} \approx p_{\text{true}}$;\quad
+  $p_{\text{reco}}$ biased
+    & Non-linear coupling between vertex and timing errors
+    & Examine $\Delta z \cdot \Delta t$ correlations \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+In all cases the $\gamma^2$ amplification factor means that even a ``good'' diagnostic
+result (one branch close to truth) should be interpreted bearing in mind that the
+remaining branch error is amplified by $\gamma^2$ before it contributes to
+$\Delta p / p$.

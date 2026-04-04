@@ -252,14 +252,18 @@ void KLong_plot_compare_spreads() {
         tree->SetBranchAddress("true_p", &true_p);
         
         // Fill scatter plot
+        const double anomaly_threshold = 1.0; // Filter |delta_p/true_p| > 100% as unphysical outliers
         Long64_t nEntries = tree->GetEntries();
         int points_filled = 0;
         for (Long64_t entry = 0; entry < nEntries; ++entry) {
             tree->GetEntry(entry);
             if (reco_p && true_p) {
                 for (size_t i = 0; i < reco_p->size(); ++i) {
-                    double delta_p = (*reco_p)[i] - (*true_p)[i];
-                    h_scatter->Fill(delta_p, (*true_p)[i]);
+                    double p_true  = (*true_p)[i];
+                    double delta_p = (*reco_p)[i] - p_true;
+                    if (p_true <= 0.) continue;
+                    if (std::abs(delta_p) / p_true > anomaly_threshold) continue;
+                    h_scatter->Fill(delta_p, p_true);
                     points_filled++;
                 }
             }

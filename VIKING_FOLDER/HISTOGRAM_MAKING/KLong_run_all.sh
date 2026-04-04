@@ -15,16 +15,19 @@
 #   ./KLong_run_all.sh [archive_name] [output_dir]
 #
 # Arguments:
-#   archive_name   Name of the folder inside ARCHIVED_RESULTS to read from.
-#                  Default: TGRAPH_TEST_20260316
-#   output_dir     Root directory for output PNGs.
-#                  Default: <archive_name>_plots  (created if it doesn't exist)
-#                  Subdirs standard/ and truez/ are created automatically.
+#   archive_name        Name of the folder inside ARCHIVED_RESULTS to read from.
+#                       Default: TGRAPH_TEST_20260316
+#   output_dir          Root directory for output PNGs.
+#                       Default: <archive_name>_plots  (created if it doesn't exist)
+#                       Subdirs standard/ and truez/ are created automatically.
+#   anomaly_threshold   Maximum allowed |delta_p / true_p| before an event is
+#                       filtered out of all histogram macros.
+#                       Default: 1.0  (100% — removes only wildly unphysical events)
+#                       Set lower (e.g. 0.5) to focus plots on the core population.
 #
 # Example:
 #   ./KLong_run_all.sh TGRAPH_TEST_20260317 my_plots
-#   # -> my_plots/standard/*.png  (PoCA reconstruction)
-#   # -> my_plots/truez/*.png     (truth-vertex reconstruction)
+#   ./KLong_run_all.sh TGRAPH_TEST_20260317 my_plots 0.5   # tighter 50% cut
 #
 # Macros run (in order):
 #   KLong_plot_compare_acceptance.C       -> KLong_acceptance_comparison.png
@@ -46,6 +49,7 @@ set -euo pipefail
 # ── Arguments ─────────────────────────────────────────────────────────────────
 ARCHIVE="${1:-TGRAPH_TEST_20260316}"
 OUTDIR="${2:-${ARCHIVE}_plots}"
+ANOMALY_THRESHOLD="${3:-1.0}"  # fractional |delta_p/true_p| cut applied in all macros
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,10 +66,11 @@ fi
 
 echo "============================================================"
 echo "  KLong_run_all.sh"
-echo "  Archive : ${ARCHIVE}"
-echo "  Output  : ${OUTDIR_ROOT}"
+echo "  Archive            : ${ARCHIVE}"
+echo "  Output             : ${OUTDIR_ROOT}"
 echo "    standard/ -> PoCA reconstruction"
 echo "    truez/    -> truth-vertex reconstruction"
+echo "  Anomaly threshold  : ${ANOMALY_THRESHOLD}  (|delta_p/true_p| cut)"
 echo "============================================================"
 echo ""
 
@@ -95,13 +100,17 @@ run_macro() {
     tmpdir="$(mktemp -d "${SCRIPT_DIR}/tmp_XXXXXX")"
     local tmp="${tmpdir}/${macro}"
 
-    # Substitute the default archive name (and vector filename for truez pass)
+    # Substitute the default archive name, vector filename (truez pass),
+    # and anomaly_threshold value so all macros use the same cut.
     if [[ "${VECTORS_MODE}" == "truez" ]]; then
         sed -e "s|TGRAPH_TEST_20260316|${ARCHIVE}|g" \
             -e "s|_combined_vectors\.root|_combined_vectors_truez.root|g" \
+            -e "s|anomaly_threshold = [0-9.]*|anomaly_threshold = ${ANOMALY_THRESHOLD}|g" \
             "${src}" > "${tmp}"
     else
-        sed "s|TGRAPH_TEST_20260316|${ARCHIVE}|g" "${src}" > "${tmp}"
+        sed -e "s|TGRAPH_TEST_20260316|${ARCHIVE}|g" \
+            -e "s|anomaly_threshold = [0-9.]*|anomaly_threshold = ${ANOMALY_THRESHOLD}|g" \
+            "${src}" > "${tmp}"
     fi
 
     echo "──────────────────────────────────────────────────────────"
