@@ -18,8 +18,10 @@
 #     For every subdirectory in SIMULATION_RESULTS/ it looks for:
 #       <CONFIG>_combined_acceptance.root
 #       <CONFIG>_combined_vectors.root
-#     and copies both into ARCHIVED_RESULTS/<ARCHIVE_NAME>_<DATE>/.
-#     Missing files are flagged as [MISSING] and counted in the summary.
+#       <CONFIG>_combined_vectors_truez.root   (diagnostic; optional)
+#     and copies all found files into ARCHIVED_RESULTS/<ARCHIVE_NAME>_<DATE>/.
+#     Missing acceptance/vectors files are flagged as [MISSING] and counted.
+#     The truez file is flagged as [INFO] if absent (older runs may not have it).
 #
 #   Example:
 #     cd HISTOGRAM_MAKING
@@ -83,6 +85,7 @@ echo ""
 CONFIGS_FOUND=0
 CONFIGS_OK=0
 CONFIGS_WARN=0
+TRUEZ_FOUND=0
 
 for CONFIG_DIR in "$SIM_DIR"/*/; do
     [[ -d "$CONFIG_DIR" ]] || continue
@@ -113,6 +116,15 @@ for CONFIG_DIR in "$SIM_DIR"/*/; do
         MISSING=$((MISSING + 1))
     fi
 
+    VECTORS_TRUEZ_FILE="$CONFIG_DIR/${CONFIG_NAME}_combined_vectors_truez.root"
+    if [[ -f "$VECTORS_TRUEZ_FILE" ]]; then
+        cp "$VECTORS_TRUEZ_FILE" "$ARCHIVE_DIR/"
+        echo "    [OK] Copied combined_vectors_truez.root"
+        TRUEZ_FOUND=$((TRUEZ_FOUND + 1))
+    else
+        echo "    [INFO] No combined_vectors_truez.root (diagnostic branch may be disabled)"
+    fi
+
     if [[ "$MISSING" -eq 0 ]]; then
         CONFIGS_OK=$((CONFIGS_OK + 1))
     else
@@ -131,6 +143,7 @@ echo ""
 echo "  Configurations found   : $CONFIGS_FOUND"
 echo "  Fully archived         : $CONFIGS_OK"
 echo "  Missing files          : $CONFIGS_WARN"
+echo "  With truez diagnostic  : $TRUEZ_FOUND"
 echo ""
 echo "  Output: $ARCHIVE_DIR"
 echo "============================================================"

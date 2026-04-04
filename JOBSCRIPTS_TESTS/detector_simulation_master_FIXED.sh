@@ -518,9 +518,88 @@ done
 echo "Combining acceptance files..."
 hadd -f "${RESULTS_DIR}/${CONFIG_STR}_combined_acceptance.root" ${RESULTS_DIR}/${CONFIG_STR}_[0-9]*_acceptance.root
 
-# Combine vector files  
+# Combine vector files
 echo "Combining vector files..."
 hadd -f "${RESULTS_DIR}/${CONFIG_STR}_combined_vectors.root" ${RESULTS_DIR}/${CONFIG_STR}_[0-9]*_vectors.root
+
+# Create a second combined file where reco_p_truez is used as the primary reco_p.
+# This lets existing histogram macros run on both outputs without modification:
+#   _combined_vectors.root       -> standard PoCA reconstruction
+#   _combined_vectors_truez.root -> truth-vertex reconstruction (diagnostic)
+echo "Creating truth-vertex diagnostic combined file..."
+root -l -b -q << ROOTEOF
+{
+    TFile *fin  = TFile::Open("${RESULTS_DIR}/${CONFIG_STR}_combined_vectors.root");
+    if (!fin || fin->IsZombie()) {
+        std::cerr << "ERROR: Cannot open combined_vectors.root\n"; return; }
+    TTree *tin  = (TTree*)fin->Get("kaonVectors");
+    if (!tin) { std::cerr << "ERROR: kaonVectors tree not found\n"; return; }
+
+    TFile *fout = new TFile(
+        "${RESULTS_DIR}/${CONFIG_STR}_combined_vectors_truez.root", "RECREATE");
+    TTree *tout = new TTree("kaonVectors",
+        "Kaon vectors - truth-vertex diagnostic (reco_p = reco_p_truez)");
+
+    // Declare branch buffers
+    std::vector<double> *reco_p        = nullptr;
+    std::vector<double> *true_p        = nullptr;
+    std::vector<double> *reco_p_truez  = nullptr;
+    std::vector<double> *reco_p_truet  = nullptr;
+    std::vector<double> *reco_vx = nullptr, *reco_vy = nullptr, *reco_vz = nullptr;
+    std::vector<double> *true_vx = nullptr, *true_vy = nullptr, *true_vz = nullptr;
+
+    tin->SetBranchAddress("reco_p",        &reco_p);
+    tin->SetBranchAddress("true_p",        &true_p);
+    tin->SetBranchAddress("reco_p_truez",  &reco_p_truez);
+    tin->SetBranchAddress("reco_p_truet",  &reco_p_truet);
+    tin->SetBranchAddress("reco_vertex_x", &reco_vx);
+    tin->SetBranchAddress("reco_vertex_y", &reco_vy);
+    tin->SetBranchAddress("reco_vertex_z", &reco_vz);
+    tin->SetBranchAddress("true_vertex_x", &true_vx);
+    tin->SetBranchAddress("true_vertex_y", &true_vy);
+    tin->SetBranchAddress("true_vertex_z", &true_vz);
+
+    // Output branches — reco_p is filled from reco_p_truez; original reco_p
+    // is preserved as reco_p_poca so the two can still be compared.
+    std::vector<double> out_reco_p, out_reco_p_poca, out_reco_p_truet;
+    std::vector<double> out_true_p;
+    std::vector<double> out_rvx, out_rvy, out_rvz;
+    std::vector<double> out_tvx, out_tvy, out_tvz;
+
+    tout->Branch("reco_p",        &out_reco_p);
+    tout->Branch("reco_p_poca",   &out_reco_p_poca);
+    tout->Branch("reco_p_truet",  &out_reco_p_truet);
+    tout->Branch("true_p",        &out_true_p);
+    tout->Branch("reco_vertex_x", &out_rvx);
+    tout->Branch("reco_vertex_y", &out_rvy);
+    tout->Branch("reco_vertex_z", &out_rvz);
+    tout->Branch("true_vertex_x", &out_tvx);
+    tout->Branch("true_vertex_y", &out_tvy);
+    tout->Branch("true_vertex_z", &out_tvz);
+
+    Long64_t nEntries = tin->GetEntries();
+    for (Long64_t i = 0; i < nEntries; ++i) {
+        tin->GetEntry(i);
+        // Promote reco_p_truez -> reco_p; keep original PoCA reco_p as reco_p_poca
+        out_reco_p       = *reco_p_truez;
+        out_reco_p_poca  = *reco_p;
+        out_reco_p_truet = *reco_p_truet;
+        out_true_p       = *true_p;
+        out_rvx = *reco_vx; out_rvy = *reco_vy; out_rvz = *reco_vz;
+        out_tvx = *true_vx; out_tvy = *true_vy; out_tvz = *true_vz;
+        tout->Fill();
+    }
+
+    fout->Write();
+    fout->Close();
+    fin->Close();
+    std::cout << "Created combined_vectors_truez.root (" << nEntries << " entries)\n";
+}
+ROOTEOF
+
+echo "Combined vectors files:"
+echo "  Standard : ${RESULTS_DIR}/${CONFIG_STR}_combined_vectors.root"
+echo "  Truth-vtx: ${RESULTS_DIR}/${CONFIG_STR}_combined_vectors_truez.root"
 
 if [ "$CLEANUP_ON_SUCCESS" = true ]; then
     # Cleanup per-run acceptance and vector files after successful combination

@@ -192,16 +192,16 @@ double tof_bar_y_centre(int copyNumber) {
 //
 // DETECTOR CONTRIBUTIONS:
 //   T1  (IDs   1-488)   : measures X; contributes to gx only
-//                         sigma_x = STRAW_HALF_WIDTH (0.4 cm)
+//                         sigma_x = time dependent, smaller than half width (0.04 cm)
 //   T2  (IDs 489-976)   : measures Y; contributes to gy only
-//                         sigma_y = STRAW_HALF_WIDTH (0.4 cm)
+//                         sigma_y = time dependent, smaller than half width (0.04 cm)
 //   T3  (IDs 977-1464)  : stereo +45deg; contributes to both gx and gy
-//                         sigma = STRAW_HALF_WIDTH * sqrt(2)  (propagated)
-//   T4  (IDs 1465-1952) : stereo -45deg; same as T3
+//                         sigma = 0.04 cm * sqrt(2)  (propagated)
+//   T4  (IDs 1465-1952) : stereo -45deg, same error propagation as T3
 //   FRI-W1 (2001-2026)  : measures X; contributes to gx only
-//                         sigma_x = fri_half_width(strip_i)  (1.5 or 3.0 cm)
+//                         sigma_x = fri_half_width(strip_i) x 0.5  (1.5 or 3.0 cm)
 //   FRI-W2 (2027-2052)  : measures Y; contributes to gy only
-//                         sigma_y = fri_half_width(strip_i)
+//                         sigma_y = fri_half_width(strip_i) x 0.5  (1.5 or 3.0 cm)
 //   TOF    (2053-2070)  : EXCLUDED from fit — bar centre uncertainties
 //                         (+/-6 cm X, +/-10 cm Y) bias the slope at the
 //                         ~460 cm lever arm; used only for velocity.
@@ -230,36 +230,36 @@ TrackFit fit_3dgraph_track(const std::vector<HitInfo>& hits,
         if (id >= 1 && id <= 488) {
             // T1 (station 0): straws oriented along Y, measures X
             // Raw Geant4 h.x is the true particle x position in the straw.
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(STRAW_HALF_WIDTH);
+            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(0.04); // cm  — effective resolution better than half-width due to time info
         }
         else if (id >= 489 && id <= 976) {
             // T2 (station 1): straws oriented along X, measures Y
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(STRAW_HALF_WIDTH);
+            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(0.04); // cm  — effective resolution better than half-width due to time info
         }
         else if (id >= 977 && id <= 1464) {
             // T3 (station 2): stereo +45 deg.
             // Straw oriented along (1/sqrt2, 1/sqrt2, 0).
             // Measurement precision STRAW_HALF_WIDTH is along the perpendicular
             // (rotated) axis; projecting onto lab X and Y gives sigma * sqrt(2).
-            double sxy = STRAW_HALF_WIDTH * SQRT2;
+            double sxy = 0.04 * SQRT2;
             xz.push_back(h.z); xv.push_back(h.x); xe.push_back(sxy);
             yz.push_back(h.z); yv.push_back(h.y); ye.push_back(sxy);
         }
         else if (id >= 1465 && id <= 1952) {
             // T4 (station 3): stereo -45 deg, same error propagation as T3
-            double sxy = STRAW_HALF_WIDTH * SQRT2;
+            double sxy = 0.04 * SQRT2;
             xz.push_back(h.z); xv.push_back(h.x); xe.push_back(sxy);
             yz.push_back(h.z); yv.push_back(h.y); ye.push_back(sxy);
         }
         else if (id >= 2001 && id <= 2026) {
             // FRI Wall 1: strips oriented along Y, measures X
             int strip_i = id - 2001;
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i));
+            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i) * 0.5); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
         }
         else if (id >= 2027 && id <= 2052) {
             // FRI Wall 2: strips oriented along X, measures Y
             int strip_i = id - 2027;
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i));
+            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i) * 0.5); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
         }
         // TOF hits are intentionally excluded from the track fit.
         // The bar centre has large uncertainties (±6 cm in X, ±10 cm in Y)
@@ -504,6 +504,17 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
     std::vector<double> reco_p, true_p;
     std::vector<double> reco_vertex_x, reco_vertex_y, reco_vertex_z;
     std::vector<double> true_vertex_x, true_vertex_y, true_vertex_z;
+
+    // Diagnostic reconstruction branches — used to isolate error sources:
+    //   reco_p_truez : uses MC truth vertex position, reconstructed pion times.
+    //                  If this recovers true_p, the dominant error is the vertex
+    //                  z bias (PoCA algebra).  If it is still wrong, timing is
+    //                  the dominant error.
+    //   reco_p_truet : uses reconstructed vertex position, MC truth decay time.
+    //                  If this recovers true_p, the timing chain is the dominant
+    //                  error source.  Together with reco_p_truez these two branches
+    //                  allow the z-bias and time-bias contributions to be separated.
+    std::vector<double> reco_p_truez, reco_p_truet;
 
     // ========================================================================
     // STEP 3: BUILD MC TRUTH LOOKUP FROM Ntuple1
@@ -975,6 +986,57 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         }
 
         // ----------------------------------------------------------------
+        // DIAGNOSTIC RECONSTRUCTION 1: truth vertex position, reco pion times.
+        // Back-propagates each pion to the true vertex instead of the PoCA
+        // midpoint, then computes kaon velocity from the true flight path.
+        // Isolates whether the z-bias is the dominant momentum error.
+        // ----------------------------------------------------------------
+        double kaon_p_truez = -1.;
+        {
+            TVector3 vtx_tz(true_vertex_vec.X(),
+                            true_vertex_vec.Y(),
+                            true_vertex_vec.Z());
+            double pip_path_tz = (pip_pizza_pos - vtx_tz).Mag();
+            double pim_path_tz = (pim_pizza_pos - vtx_tz).Mag();
+            double pip_dt_tz   = pip_pizza_time * 1e-9 - (pip_path_tz * 1e-2 / pip_v);
+            double pim_dt_tz   = pim_pizza_time * 1e-9 - (pim_path_tz * 1e-2 / pim_v);
+            double t_decay_tz  = 0.5 * (pip_dt_tz + pim_dt_tz);
+            double flight_tz   = (vtx_tz - kaon_prod).Mag();
+            if (t_decay_tz > 0.) {
+                double v_tz = (flight_tz * 1e-2) / t_decay_tz;
+                double b_tz = v_tz / 2.99792458e8;
+                if (b_tz < 1.0) {
+                    double g_tz = 1.0 / std::sqrt(1. - b_tz * b_tz);
+                    kaon_p_truez = g_tz * m_K * b_tz;
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // DIAGNOSTIC RECONSTRUCTION 2: truth decay time, reco vertex.
+        // Derives the MC truth kaon decay time from Ntuple1 momentum/vertex,
+        // then uses the reconstructed PoCA vertex for the kaon flight path.
+        // Isolates whether the timing chain is the dominant momentum error.
+        // ----------------------------------------------------------------
+        double kaon_p_truet = -1.;
+        {
+            double true_beta_K  = true_p_mag /
+                std::sqrt(true_p_mag * true_p_mag + m_K * m_K);
+            double flight_true  = (true_vertex_vec - kaon_prod).Mag();
+            double t_decay_true = (flight_true * 1e-2) /
+                (true_beta_K * 2.99792458e8);
+            double flight_reco  = (decay_vertex - kaon_prod).Mag();
+            if (t_decay_true > 0.) {
+                double v_rt = (flight_reco * 1e-2) / t_decay_true;
+                double b_rt = v_rt / 2.99792458e8;
+                if (b_rt < 1.0) {
+                    double g_rt = 1.0 / std::sqrt(1. - b_rt * b_rt);
+                    kaon_p_truet = g_rt * m_K * b_rt;
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------
         // RECONSTRUCTION CUT: reject unphysically large reco momenta.
         // [TO CHANGE] Adjust upper bound to match beam momentum range.
         // ----------------------------------------------------------------
@@ -992,6 +1054,8 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
 
         reco_p.push_back(kaon_p);
         true_p.push_back(true_p_mag);
+        reco_p_truez.push_back(kaon_p_truez);
+        reco_p_truet.push_back(kaon_p_truet);
         reco_vertex_x.push_back(decay_vertex.X());
         reco_vertex_y.push_back(decay_vertex.Y());
         reco_vertex_z.push_back(decay_vertex.Z());
@@ -1013,17 +1077,22 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
     TFile *outFile = new TFile(outFileName.c_str(), "RECREATE");
     TTree *outTree = new TTree("kaonVectors", "Kaon momentum and vertex vectors");
 
-    std::vector<double> *p_reco   = &reco_p;
-    std::vector<double> *p_true   = &true_p;
-    std::vector<double> *v_reco_x = &reco_vertex_x;
-    std::vector<double> *v_reco_y = &reco_vertex_y;
-    std::vector<double> *v_reco_z = &reco_vertex_z;
-    std::vector<double> *v_true_x = &true_vertex_x;
-    std::vector<double> *v_true_y = &true_vertex_y;
-    std::vector<double> *v_true_z = &true_vertex_z;
+    std::vector<double> *p_reco      = &reco_p;
+    std::vector<double> *p_true      = &true_p;
+    std::vector<double> *p_reco_tz   = &reco_p_truez;
+    std::vector<double> *p_reco_tt   = &reco_p_truet;
+    std::vector<double> *v_reco_x    = &reco_vertex_x;
+    std::vector<double> *v_reco_y    = &reco_vertex_y;
+    std::vector<double> *v_reco_z    = &reco_vertex_z;
+    std::vector<double> *v_true_x    = &true_vertex_x;
+    std::vector<double> *v_true_y    = &true_vertex_y;
+    std::vector<double> *v_true_z    = &true_vertex_z;
 
     outTree->Branch("reco_p",        &p_reco);
     outTree->Branch("true_p",        &p_true);
+    // Diagnostic branches — see vector declarations above for interpretation
+    outTree->Branch("reco_p_truez",  &p_reco_tz);
+    outTree->Branch("reco_p_truet",  &p_reco_tt);
     outTree->Branch("reco_vertex_x", &v_reco_x);
     outTree->Branch("reco_vertex_y", &v_reco_y);
     outTree->Branch("reco_vertex_z", &v_reco_z);

@@ -5,17 +5,26 @@
 # archive folder name at runtime, and collects every output PNG into a
 # single directory.
 #
+# Two passes are run automatically:
+#   Pass 1 (standard): macros read *_combined_vectors.root       -> output_dir/standard/
+#   Pass 2 (truez):    macros read *_combined_vectors_truez.root -> output_dir/truez/
+# Acceptance macros (which read *_combined_acceptance.root) are run in both
+# passes; their output is identical but placed in the respective subdirectory.
+#
 # Usage:
 #   ./KLong_run_all.sh [archive_name] [output_dir]
 #
 # Arguments:
 #   archive_name   Name of the folder inside ARCHIVED_RESULTS to read from.
 #                  Default: TGRAPH_TEST_20260316
-#   output_dir     Directory to write all output PNGs into.
+#   output_dir     Root directory for output PNGs.
 #                  Default: <archive_name>_plots  (created if it doesn't exist)
+#                  Subdirs standard/ and truez/ are created automatically.
 #
 # Example:
 #   ./KLong_run_all.sh TGRAPH_TEST_20260317 my_plots
+#   # -> my_plots/standard/*.png  (PoCA reconstruction)
+#   # -> my_plots/truez/*.png     (truth-vertex reconstruction)
 #
 # Macros run (in order):
 #   KLong_plot_compare_acceptance.C       -> KLong_acceptance_comparison.png
@@ -40,7 +49,9 @@ OUTDIR="${2:-${ARCHIVE}_plots}"
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTDIR_ABS="$(mkdir -p "${OUTDIR}" && cd "${OUTDIR}" && pwd)"
+mkdir -p "${OUTDIR}/standard" "${OUTDIR}/truez"
+OUTDIR_ROOT="$(cd "${OUTDIR}" && pwd)"
+OUTDIR_ABS="${OUTDIR_ROOT}/standard"   # overridden per-pass
 
 # Verify the archive folder actually exists before spending time running macros
 ARCHIVE_BASE="/users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS"
@@ -52,13 +63,17 @@ fi
 echo "============================================================"
 echo "  KLong_run_all.sh"
 echo "  Archive : ${ARCHIVE}"
-echo "  Output  : ${OUTDIR_ABS}"
+echo "  Output  : ${OUTDIR_ROOT}"
+echo "    standard/ -> PoCA reconstruction"
+echo "    truez/    -> truth-vertex reconstruction"
 echo "============================================================"
 echo ""
 
-# Count how many ROOT files are in the archive
-N_CONFIGS=$(find "${ARCHIVE_BASE}/${ARCHIVE}" -name '*combined_vectors.root' | wc -l)
-echo "  Found ${N_CONFIGS} configuration(s) in archive"
+# Count ROOT files in archive
+N_CONFIGS=$(find "${ARCHIVE_BASE}/${ARCHIVE}" -name '*combined_vectors.root' ! -name '*_truez*' | wc -l)
+N_TRUEZ=$(find "${ARCHIVE_BASE}/${ARCHIVE}" -name '*combined_vectors_truez.root' | wc -l)
+echo "  Found ${N_CONFIGS} standard configuration(s) in archive"
+echo "  Found ${N_TRUEZ} truez configuration(s) in archive"
 echo ""
 
 # ── Helper: sed-substitute archive name into a temp file, run it, move PNGs ──
@@ -80,8 +95,14 @@ run_macro() {
     tmpdir="$(mktemp -d "${SCRIPT_DIR}/tmp_XXXXXX")"
     local tmp="${tmpdir}/${macro}"
 
-    # Substitute the default archive name with the requested one
-    sed "s|TGRAPH_TEST_20260316|${ARCHIVE}|g" "${src}" > "${tmp}"
+    # Substitute the default archive name (and vector filename for truez pass)
+    if [[ "${VECTORS_MODE}" == "truez" ]]; then
+        sed -e "s|TGRAPH_TEST_20260316|${ARCHIVE}|g" \
+            -e "s|_combined_vectors\.root|_combined_vectors_truez.root|g" \
+            "${src}" > "${tmp}"
+    else
+        sed "s|TGRAPH_TEST_20260316|${ARCHIVE}|g" "${src}" > "${tmp}"
+    fi
 
     echo "──────────────────────────────────────────────────────────"
     echo "  Running: ${macro}"
@@ -108,37 +129,67 @@ run_macro() {
     echo ""
 }
 
-# ── Run each macro ─────────────────────────────────────────────────────────────
+# ── Inner helper: runs all macros once (uses globals OUTDIR_ABS, VECTORS_MODE) ─
+run_all_macros() {
+    run_macro "KLong_plot_compare_acceptance.C" \
+        "KLong_acceptance_comparison.png"
 
-run_macro "KLong_plot_compare_acceptance.C" \
-    "KLong_acceptance_comparison.png"
+    run_macro "KLong_plot_compare_resolution.C" \
+        "KLong_resolution_comparison.png"
 
-run_macro "KLong_plot_compare_resolution.C" \
-    "KLong_resolution_comparison.png"
+    run_macro "KLong_plot_compare_spreads.C" \
+        "KLong_plot_compare_spreads.png"
 
-run_macro "KLong_plot_compare_spreads.C" \
-    "KLong_plot_compare_spreads.png"
+    run_macro "KLong_plot_gaussian_spreads.C" \
+        "KLong_plot_gaussian_spreads.png"
 
-run_macro "KLong_plot_gaussian_spreads.C" \
-    "KLong_plot_gaussian_spreads.png"
+    run_macro "KLong_plot_gaussian_spreads_truncated.C" \
+        "KLong_plot_gaussian_spreads_truncated.png"
 
-run_macro "KLong_plot_gaussian_spreads_truncated.C" \
-    "KLong_plot_gaussian_spreads_truncated.png"
+    run_macro "KLong_plot_resolution_histbar.C" \
+        "KLong_histbar_plot_*.png"
 
-run_macro "KLong_plot_resolution_histbar.C" \
-    "KLong_histbar_plot_*.png"
+    run_macro "KLong_validate_reconstruction.C" \
+        "KLong_validate_ratio.png" \
+        "KLong_validate_delta_p.png"
 
-run_macro "KLong_validate_reconstruction.C" \
-    "KLong_validate_ratio.png" \
-    "KLong_validate_delta_p.png"
+    run_macro "KLong_validate_vertex.C" \
+        "KLong_validate_vertex_residuals.png" \
+        "KLong_validate_vertex_z_profile.png"
+}
 
-run_macro "KLong_validate_vertex.C" \
-    "KLong_validate_vertex_residuals.png" \
-    "KLong_validate_vertex_z_profile.png"
+# ── Pass 1: standard PoCA reconstruction ──────────────────────────────────────
+VECTORS_MODE=standard
+OUTDIR_ABS="${OUTDIR_ROOT}/standard"
+echo "============================================================"
+echo "  Pass 1/2 — Standard PoCA reconstruction"
+echo "  Output  : ${OUTDIR_ABS}"
+echo "============================================================"
+echo ""
+run_all_macros
+
+# ── Pass 2: truth-vertex reconstruction ───────────────────────────────────────
+VECTORS_MODE=truez
+OUTDIR_ABS="${OUTDIR_ROOT}/truez"
+echo "============================================================"
+echo "  Pass 2/2 — Truth-vertex reconstruction (reco_p_truez)"
+echo "  Output  : ${OUTDIR_ABS}"
+echo "============================================================"
+if [[ "${N_TRUEZ}" -eq 0 ]]; then
+    echo "  WARNING: No *_combined_vectors_truez.root files found in archive." >&2
+    echo "           Run a new simulation with the updated KLong_save_vectors.C first." >&2
+    echo ""
+else
+    echo ""
+    run_all_macros
+fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo "============================================================"
-echo "  Done. Output PNGs in: ${OUTDIR_ABS}"
+echo "  Done."
 echo ""
-ls -1 "${OUTDIR_ABS}"/*.png 2>/dev/null | while read -r f; do echo "  $(basename "${f}")"; done
+echo "  Standard plots : ${OUTDIR_ROOT}/standard/"
+ls -1 "${OUTDIR_ROOT}/standard/"*.png 2>/dev/null | wc -l | xargs -I{} echo "    {} PNG(s)"
+echo "  TrueZ plots    : ${OUTDIR_ROOT}/truez/"
+ls -1 "${OUTDIR_ROOT}/truez/"*.png 2>/dev/null | wc -l | xargs -I{} echo "    {} PNG(s)"
 echo "============================================================"
