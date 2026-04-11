@@ -52,7 +52,6 @@ DetectorLayout parseConfigString(const std::string& config) {
 
 // Draw detector layout schematic
 void drawDetectorLayout(const std::vector<std::string>& config_labels,
-                        const std::vector<int>& line_colors,
                         double x_min, double x_max, double y_min, double y_max) {
     gPad->Range(x_min, y_min, x_max, y_max);
     
@@ -92,10 +91,11 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
         DetectorLayout layout = parseConfigString(config_labels[i]);
         double y_center = 0.90 - (i + 1) * y_spacing;
         
-        TLine *indicator = new TLine(0.02, y_center, 0.08, y_center);
-        indicator->SetLineColor(line_colors[i]);
-        indicator->SetLineWidth(4);
-        indicator->Draw();
+        TText *config_num = new TText(0.05, y_center, Form("%d", (int)i + 1));
+        config_num->SetTextAlign(22);
+        config_num->SetTextSize(0.045);
+        config_num->SetTextFont(62);
+        config_num->Draw();
         
         double x_scale = 0.80;
         double x_offset = 0.15;
@@ -322,7 +322,7 @@ void KLong_plot_compare_spreads() {
     // Last panel: detector layout legend
     if (root_files.size() > 0) {
         c1->cd(8);
-        drawDetectorLayout(config_labels, line_colors, 0, 1, 0, 1);
+        drawDetectorLayout(config_labels, 0, 1, 0, 1);
     }
     
     c1->Update();

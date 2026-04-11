@@ -133,6 +133,7 @@ struct EventReco {
     // TOF wall: TOF stop — only deviceID stored; position from geometry lookup
     bool   has_pip_tof = false;
     double pip_tof_time = 0;        // ns (smeared)
+    double pip_tof_z    = 0;        // raw Geant4 hit z (cm)
     int    pip_tof_deviceID = -1;
 
     bool   has_pim_pizza = false;
@@ -141,6 +142,7 @@ struct EventReco {
 
     bool   has_pim_tof = false;
     double pim_tof_time = 0;
+    double pim_tof_z    = 0;        // raw Geant4 hit z (cm)
     int    pim_tof_deviceID = -1;
 };
 
@@ -621,6 +623,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
                 if (!ev.has_pip_tof || st < ev.pip_tof_time) {
                     ev.has_pip_tof      = true;
                     ev.pip_tof_time     = st;
+                    ev.pip_tof_z        = z; // raw Geant4 hit z (not geometry face z_tof)
                     ev.pip_tof_deviceID = id;  // bar centre looked up in event loop
                 }
             }
@@ -644,6 +647,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
                 if (!ev.has_pim_tof || st < ev.pim_tof_time) {
                     ev.has_pim_tof      = true;
                     ev.pim_tof_time     = st;
+                    ev.pim_tof_z        = z; // raw Geant4 hit z (not geometry face z_tof)
                     ev.pim_tof_deviceID = id;
                 }
             }
@@ -675,6 +679,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         double pip_pizza_x = 0, pip_pizza_y = 0, pip_pizza_z = 0;
         double pim_pizza_x = 0, pim_pizza_y = 0, pim_pizza_z = 0;
         double pip_tof_time = -1, pim_tof_time = -1;
+        double pip_tof_z_raw = z_tof, pim_tof_z_raw = z_tof; // default to geometry face
         int    pip_tof_devID = -1, pim_tof_devID = -1;
         std::vector<HitInfo> hits_pip, hits_pim;
 
@@ -697,10 +702,12 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
             }
             if (ev.has_pip_tof) {
                 pip_tof_time  = ev.pip_tof_time;
+                pip_tof_z_raw = ev.pip_tof_z;
                 pip_tof_devID = ev.pip_tof_deviceID;
             }
             if (ev.has_pim_tof) {
                 pim_tof_time  = ev.pim_tof_time;
+                pim_tof_z_raw = ev.pim_tof_z;
                 pim_tof_devID = ev.pim_tof_deviceID;
             }
         }
@@ -1022,10 +1029,18 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
 
         // ----------------------------------------------------------------
         // PION VELOCITY  v = path_length / delta_t
-        // [TO CHANGE] If trajectory is curved, replace Mag() with arc length.
+        // Path uses track-fit extrapolation to z_tof (not the smeared ToF
+        // hit position — TOF_Y_UNCERTAINTY = 10 cm would otherwise inflate
+        // the 3D path length in quadrature on every event, causing a
+        // systematic overestimate of pip_v and therefore a systematic
+        // underestimate of kaon momentum via the back-propagation chain).
         // ----------------------------------------------------------------
-        double pip_track_cm = (pip_tof_pos - pip_pizza_pos).Mag();
-        double pim_track_cm = (pim_tof_pos - pim_pizza_pos).Mag();
+        double t_pip_tof = (pip_dir.Z() != 0.) ? (pip_tof_z_raw - pip_start.Z()) / pip_dir.Z() : 0.;
+        TVector3 pip_tof_fit = pip_start + t_pip_tof * pip_dir;
+        double t_pim_tof = (pim_dir.Z() != 0.) ? (pim_tof_z_raw - pim_start.Z()) / pim_dir.Z() : 0.;
+        TVector3 pim_tof_fit = pim_start + t_pim_tof * pim_dir;
+        double pip_track_cm = (pip_tof_fit - pip_pizza_pos).Mag();
+        double pim_track_cm = (pim_tof_fit - pim_pizza_pos).Mag();
 
         double pip_dt_ns = pip_tof_time - pip_pizza_time;
         double pim_dt_ns = pim_tof_time - pim_pizza_time;
