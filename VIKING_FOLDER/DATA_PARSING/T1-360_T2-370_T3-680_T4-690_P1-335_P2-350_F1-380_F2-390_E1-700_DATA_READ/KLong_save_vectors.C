@@ -199,9 +199,9 @@ double tof_bar_y_centre(int copyNumber) {
 //                         sigma = 0.04 cm * sqrt(2)  (propagated)
 //   T4  (IDs 1465-1952) : stereo -45deg, same error propagation as T3
 //   FRI-W1 (2001-2026)  : measures X; contributes to gx only
-//                         sigma_x = fri_half_width(strip_i) x 0.5  (1.5 or 3.0 cm)
+//                         sigma_x = (fri_half_width(strip_i) * 2)/sqrt(12)  (1.5 or 3.0 cm)
 //   FRI-W2 (2027-2052)  : measures Y; contributes to gy only
-//                         sigma_y = fri_half_width(strip_i) x 0.5  (1.5 or 3.0 cm)
+//                         sigma_y = (fri_half_width(strip_i) * 2)/sqrt(12)  (1.5 or 3.0 cm)
 //   TOF    (2053-2070)  : EXCLUDED from fit — bar centre uncertainties
 //                         (+/-6 cm X, +/-10 cm Y) bias the slope at the
 //                         ~460 cm lever arm; used only for velocity.
@@ -254,12 +254,12 @@ TrackFit fit_3dgraph_track(const std::vector<HitInfo>& hits,
         else if (id >= 2001 && id <= 2026) {
             // FRI Wall 1: strips oriented along Y, measures X
             int strip_i = id - 2001;
-            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i) * 0.5); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
+            xz.push_back(h.z); xv.push_back(h.x); xe.push_back(fri_half_width(strip_i) * 2 / std::sqrt(12)); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
         }
         else if (id >= 2027 && id <= 2052) {
             // FRI Wall 2: strips oriented along X, measures Y
             int strip_i = id - 2027;
-            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i) * 0.5); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
+            yz.push_back(h.z); yv.push_back(h.y); ye.push_back(fri_half_width(strip_i) * 2 / std::sqrt(12)); // cm  — uniform distribution across strip width -> sigma = half-width * 0.5
         }
         // TOF hits are intentionally excluded from the track fit.
         // The bar centre has large uncertainties (±6 cm in X, ±10 cm in Y)

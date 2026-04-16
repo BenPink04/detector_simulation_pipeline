@@ -53,6 +53,45 @@ DetectorLayout parseConfigString(const std::string& config) {
     return layout;
 }
 
+// Extract T1 position from a config label string (e.g. "T1-360_T2-370_..." -> 360)
+int extractT1(const std::string& config) {
+    size_t pos = config.find("T1-");
+    if (pos == std::string::npos) return 0;
+    size_t end = config.find('_', pos + 3);
+    std::string val = config.substr(pos + 3, end == std::string::npos ? std::string::npos : end - (pos + 3));
+    return std::stoi(val);
+}
+
+// Assign a color by interpolating in RGB between five anchor T1 positions.
+// T1-360 -> kMagenta, T1-400 -> kCyan+2, T1-440 -> kOrange+2 (consistent
+// with previous 7-config run).  Configs outside this range are extrapolated
+// along the same gradient.
+int getConfigColor(int t1_val) {
+    struct Anchor { int t1; float r, g, b; };
+    const Anchor anchors[] = {
+        {240,  63,  63, 255},   // blue-violet for T1-240
+        {360, 255,   0, 255},   // kMagenta    for T1-360
+        {400,   0, 196, 196},   // kCyan+2     for T1-400
+        {440, 255, 140,   0},   // kOrange+2   for T1-440
+        {480, 148,   0, 211},   // violet      for T1-480
+    };
+    const int nAnchors = 5;
+    if (t1_val <= anchors[0].t1)
+        return TColor::GetColor(anchors[0].r/255.f, anchors[0].g/255.f, anchors[0].b/255.f);
+    if (t1_val >= anchors[nAnchors-1].t1)
+        return TColor::GetColor(anchors[nAnchors-1].r/255.f, anchors[nAnchors-1].g/255.f, anchors[nAnchors-1].b/255.f);
+    for (int i = 0; i < nAnchors - 1; ++i) {
+        if (t1_val >= anchors[i].t1 && t1_val <= anchors[i+1].t1) {
+            float frac = float(t1_val - anchors[i].t1) / float(anchors[i+1].t1 - anchors[i].t1);
+            float r = anchors[i].r + frac * (anchors[i+1].r - anchors[i].r);
+            float g = anchors[i].g + frac * (anchors[i+1].g - anchors[i].g);
+            float b = anchors[i].b + frac * (anchors[i+1].b - anchors[i].b);
+            return TColor::GetColor(r/255.f, g/255.f, b/255.f);
+        }
+    }
+    return kBlack;
+}
+
 // Draw detector layout schematic
 void drawDetectorLayout(const std::vector<std::string>& config_labels,
                         const std::vector<int>& line_colors,
@@ -83,7 +122,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
     min_pos -= range * 0.1;
     max_pos += range * 0.1;
     
-    TText *title = new TText(0.5, 0.98, "Detector Layouts");
+    TText *title = new TText(0.5, 0.98, "Detector Layouts (Top View)");
     title->SetTextAlign(23);
     title->SetTextSize(0.04);
     title->Draw();
@@ -170,7 +209,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
                            legend_x_start + 3*legend_spacing + 0.02, legend_y + 0.03);
     e_box->SetFillColor(kGreen);
     e_box->Draw();
-    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "End");
+    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "ToF");
     e_text->SetTextSize(0.03);
     e_text->Draw();
 }
@@ -215,9 +254,6 @@ void KLong_plot_gaussian_spreads_truncated() {
         std::cerr << "No combined_vectors.root files found" << std::endl;
         return;
     }
-    
-    // Color scheme
-    int colors[] = {kBlue, kRed, kGreen+2, kMagenta, kCyan+1, kOrange+1, kViolet, kTeal-5};
     
     // Momentum binning for Gaussian fits
     const int nBins = 18;
@@ -317,7 +353,7 @@ void KLong_plot_gaussian_spreads_truncated() {
         if (p_centers.size() > 0) {
             TGraph *graph = new TGraph(p_centers.size(), 
                                        &p_centers[0], &fwhm_values[0]);
-            int color = colors[idx % 8];
+            int color = getConfigColor(extractT1(config));
             line_colors.push_back(color);
             graph->SetLineColor(color);
             graph->SetLineWidth(3);

@@ -30,8 +30,9 @@
 #   ./KLong_run_all.sh TGRAPH_TEST_20260317 my_plots 0.5   # tighter 50% cut
 #
 # Macros run (in order):
-#   KLong_plot_compare_acceptance.C       -> KLong_acceptance_comparison.png
-#   KLong_plot_compare_resolution.C       -> KLong_resolution_comparison.png
+#   KLong_plot_compare_acceptance.C            -> KLong_acceptance_comparison.png
+#   KLong_plot_compare_acceptance_truncated.C  -> KLong_acceptance_comparison_truncated.png
+#   KLong_plot_compare_resolution.C            -> KLong_resolution_comparison.png
 #   KLong_plot_compare_spreads.C          -> KLong_plot_compare_spreads.png
 #   KLong_plot_gaussian_spreads.C         -> KLong_plot_gaussian_spreads.png
 #   KLong_plot_gaussian_spreads_truncated.C -> KLong_plot_gaussian_spreads_truncated.png
@@ -143,6 +144,9 @@ run_all_macros() {
     run_macro "KLong_plot_compare_acceptance.C" \
         "KLong_acceptance_comparison.png"
 
+    run_macro "KLong_plot_compare_acceptance_truncated.C" \
+        "KLong_acceptance_comparison_truncated.png"
+
     run_macro "KLong_plot_compare_resolution.C" \
         "KLong_resolution_comparison.png"
 
@@ -154,6 +158,9 @@ run_all_macros() {
 
     run_macro "KLong_plot_gaussian_spreads_truncated.C" \
         "KLong_plot_gaussian_spreads_truncated.png"
+
+    run_macro "KLong_plot_gaussian_spreads_truncated_original_colors.C" \
+        "KLong_plot_gaussian_spreads_truncated_original_colors.png"
 
     run_macro "KLong_plot_resolution_histbar.C" \
         "KLong_histbar_plot_*.png"

@@ -79,7 +79,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
     min_pos -= range * 0.1;
     max_pos += range * 0.1;
     
-    TText *title = new TText(0.5, 0.98, "Detector Layouts");
+    TText *title = new TText(0.5, 0.98, "Detector Layouts (Top View)");
     title->SetTextAlign(23);
     title->SetTextSize(0.04);
     title->Draw();
@@ -167,7 +167,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
                            legend_x_start + 3*legend_spacing + 0.02, legend_y + 0.03);
     e_box->SetFillColor(kGreen);
     e_box->Draw();
-    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "End");
+    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "ToF");
     e_text->SetTextSize(0.03);
     e_text->Draw();
 }

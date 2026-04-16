@@ -185,7 +185,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
     TBox *e_box = new TBox(legend_x_start + 3*legend_spacing, legend_y, legend_x_start + 3*legend_spacing + 0.02, legend_y + 0.03);
     e_box->SetFillColor(kGreen);
     e_box->Draw();
-    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "End");
+    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "ToF");
     e_text->SetTextSize(0.03);
     e_text->Draw();
 }
