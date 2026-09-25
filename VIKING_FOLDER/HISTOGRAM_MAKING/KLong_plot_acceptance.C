@@ -7,7 +7,7 @@
 
 void KLong_plot_acceptance() {
     std::vector<std::string> filenames = {
-        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/T1-480_T2-490_T3-680_T4-690_P1-455_P2-470_F1-500_F2-510_E1-700/T1-480_T2-490_T3-680_T4-690_P1-455_P2-470_F1-500_F2-510_E1-700_combined_acceptance.root"
+        "/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/KS_Z0-300_T1-425_T2-435_T3-465_T4-475_P1-400_P2-415_F1-455_F2-465_E1-700/KS_Z0-300_T1-425_T2-435_T3-465_T4-475_P1-400_P2-415_F1-455_F2-465_E1-700_combined_acceptance.root"
         // Add more filenames as needed
     };
 
@@ -32,6 +32,7 @@ void KLong_plot_acceptance() {
     int n_bins = int((p_max - p_min) / bin_width);
     std::vector<int> reco_in_bin(n_bins, 0);
     std::vector<int> total_in_bin(n_bins, 0);
+    int opened_files = 0;
 
     for (const auto& fname : filenames) {
         TFile *file = TFile::Open(fname.c_str());
@@ -39,6 +40,7 @@ void KLong_plot_acceptance() {
             std::cout << "Cannot open " << fname << "\n";
             continue;
         }
+        opened_files++;
 
         TTree *tree = (TTree*)file->Get("kaonEventInfo");
         if (!tree) {
@@ -73,6 +75,11 @@ void KLong_plot_acceptance() {
             }
         }
         file->Close();
+    }
+
+    if (opened_files == 0) {
+        std::cout << "ERROR: No input acceptance files were opened. Update 'filenames' in KLong_plot_acceptance.C\n";
+        return;
     }
 
     std::string title = "Reconstruction Acceptance";

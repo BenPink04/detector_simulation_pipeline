@@ -21,11 +21,14 @@ struct DetectorLayout {
     std::vector<double> pizzas;
     std::vector<double> fris;
     double end_detector;
+    double z0;
 };
 
 // Parse configuration string to extract detector positions
 DetectorLayout parseConfigString(const std::string& config) {
     DetectorLayout layout;
+    layout.end_detector = 0.0;
+    layout.z0 = -1.0;
     std::istringstream ss(config);
     std::string token;
     
@@ -47,10 +50,46 @@ DetectorLayout parseConfigString(const std::string& config) {
             layout.fris.push_back(position);
         } else if (detector_type[0] == 'E') {
             layout.end_detector = position;
+        } else if (detector_type == "Z0") {
+            layout.z0 = position;
         }
     }
     
     return layout;
+}
+
+int extractZ0(const std::string& config) {
+    size_t pos = config.find("Z0-");
+    if (pos == std::string::npos) return 0;
+    size_t end = config.find('_', pos + 3);
+    std::string val = config.substr(pos + 3, end == std::string::npos ? std::string::npos : end - (pos + 3));
+    return std::stoi(val);
+}
+
+int getConfigColor(int z0_val) {
+    struct Anchor { int z0; float r, g, b; };
+    const Anchor anchors[] = {
+        {200,  63,  63, 255},
+        {250,   0, 170, 255},
+        {300,   0, 196, 196},
+        {350, 255, 140,   0},
+        {400, 220,  20,  60},
+    };
+    const int nAnchors = 5;
+    if (z0_val <= anchors[0].z0)
+        return TColor::GetColor(anchors[0].r/255.f, anchors[0].g/255.f, anchors[0].b/255.f);
+    if (z0_val >= anchors[nAnchors-1].z0)
+        return TColor::GetColor(anchors[nAnchors-1].r/255.f, anchors[nAnchors-1].g/255.f, anchors[nAnchors-1].b/255.f);
+    for (int i = 0; i < nAnchors - 1; ++i) {
+        if (z0_val >= anchors[i].z0 && z0_val <= anchors[i+1].z0) {
+            float frac = float(z0_val - anchors[i].z0) / float(anchors[i+1].z0 - anchors[i].z0);
+            float r = anchors[i].r + frac * (anchors[i+1].r - anchors[i].r);
+            float g = anchors[i].g + frac * (anchors[i+1].g - anchors[i].g);
+            float b = anchors[i].b + frac * (anchors[i+1].b - anchors[i].b);
+            return TColor::GetColor(r/255.f, g/255.f, b/255.f);
+        }
+    }
+    return kBlack;
 }
 
 // Draw detector layout schematic
@@ -99,6 +138,12 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
         indicator->SetLineColor(line_colors[i]);
         indicator->SetLineWidth(4);
         indicator->Draw();
+
+        int z0_val = extractZ0(config_labels[i]);
+        TText *z0_label = new TText(0.085, y_center, Form("Z0=%d", z0_val));
+        z0_label->SetTextAlign(12);
+        z0_label->SetTextSize(0.022);
+        z0_label->Draw();
         
         double x_scale = 0.80;
         double x_offset = 0.15;
@@ -170,7 +215,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
                            legend_x_start + 3*legend_spacing + 0.02, legend_y + 0.03);
     e_box->SetFillColor(kGreen);
     e_box->Draw();
-    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "End");
+    TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "ToF");
     e_text->SetTextSize(0.03);
     e_text->Draw();
 }
@@ -181,7 +226,7 @@ void KLong_plot_gaussian_spreads() {
     gStyle->SetOptFit(0);
     
     // Find combined vectors files
-    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/TGRAPH_TEST_20260316 -name '*combined_vectors.root' 2>/dev/null | sort";
+    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS -name 'KS_Z0-*combined_vectors.root' 2>/dev/null | sort";
     FILE* pipe = popen(findCmd.c_str(), "r");
     if (!pipe) {
         std::cerr << "Error: Could not run find command" << std::endl;
@@ -209,15 +254,26 @@ void KLong_plot_gaussian_spreads() {
     }
     pclose(pipe);
     
+    // Sort by Z0 for consistent scan ordering
+    std::vector<size_t> order(root_files.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return extractZ0(config_labels[a]) < extractZ0(config_labels[b]);
+    });
+    std::vector<std::string> root_files_sorted, config_labels_sorted;
+    for (size_t idx : order) {
+        root_files_sorted.push_back(root_files[idx]);
+        config_labels_sorted.push_back(config_labels[idx]);
+    }
+    root_files.swap(root_files_sorted);
+    config_labels.swap(config_labels_sorted);
+
     std::cout << "Found " << root_files.size() << " configuration(s)" << std::endl;
     
     if (root_files.empty()) {
         std::cerr << "No combined_vectors.root files found" << std::endl;
         return;
     }
-    
-    // Color scheme
-    int colors[] = {kBlue, kRed, kGreen+2, kMagenta, kCyan+1, kOrange+1, kViolet, kTeal-5};
     
     // Momentum binning for Gaussian fits
     const int nBins = 18;
@@ -317,7 +373,7 @@ void KLong_plot_gaussian_spreads() {
         if (p_centers.size() > 0) {
             TGraph *graph = new TGraph(p_centers.size(), 
                                        &p_centers[0], &fwhm_values[0]);
-            int color = colors[idx % 8];
+            int color = getConfigColor(extractZ0(config));
             line_colors.push_back(color);
             graph->SetLineColor(color);
             graph->SetLineWidth(3);

@@ -391,6 +391,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
     };
 
     std::string fname_str(filename);
+    double ks_z0 = extract_param(fname_str, "KS_Z0");
     double z_tracker[4] = {
         extract_param(fname_str, "T1"), extract_param(fname_str, "T2"),
         extract_param(fname_str, "T3"), extract_param(fname_str, "T4")
@@ -411,12 +412,16 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
               << "  T4=" << extract_param(fname_str,"T4") << " cm\n"
               << "  F1=" << extract_param(fname_str,"F1")
               << "  F2=" << extract_param(fname_str,"F2") << " cm\n"
-              << "  E1=" << z_tof << " cm\n";
+              << "  E1=" << z_tof << " cm\n"
+              << "  KS_Z0=" << ks_z0 << " cm (0 means default KL origin)\n";
 
     // ========================================================================
-    // STEP 1: SELECT EVENTS WITH K_L -> pi+ pi- pi0
+    // STEP 1: SELECT EVENTS BY DECAY CHANNEL
     //
-    // [TO CHANGE] For a different decay channel, update PDG codes below.
+    // Auto mode:
+    // - KS-tagged inputs prefer pi+ pi-
+    // - KL/default inputs prefer pi+ pi- pi0
+    // Falls back to the other channel if the preferred one is empty.
     // ========================================================================
     TTree *tree2 = (TTree*)file->Get("Ntuple2");
     if (!tree2) { std::cout << "Tree Ntuple2 not found!\n"; file->Close(); return; }
@@ -432,7 +437,8 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         event_products[(int)evtNb2].push_back((int)DKparticle_PDGEncoding);
     }
 
-    std::vector<int> selected_events;
+    std::vector<int> selected_events_3pi;
+    std::vector<int> selected_events_2pi;
     for (const auto& kv : event_products) {
         bool has_pip = false, has_pim = false, has_pi0 = false;
         for (int code : kv.second) {
@@ -441,16 +447,49 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
             if (code ==  111) has_pi0 = true;
         }
         if (has_pip && has_pim && has_pi0)
-            selected_events.push_back(kv.first);
+            selected_events_3pi.push_back(kv.first);
+        if (has_pip && has_pim && !has_pi0)
+            selected_events_2pi.push_back(kv.first);
+    }
+
+    const bool prefer_ks_channel =
+        (fname_str.find("KS_") != std::string::npos ||
+         fname_str.find("kaon0S") != std::string::npos);
+
+    std::vector<int> selected_events;
+    std::string selected_channel;
+    if (prefer_ks_channel) {
+        if (!selected_events_2pi.empty()) {
+            selected_events = selected_events_2pi;
+            selected_channel = "pi+ pi-";
+        } else {
+            selected_events = selected_events_3pi;
+            selected_channel = "pi+ pi- pi0";
+        }
+    } else {
+        if (!selected_events_3pi.empty()) {
+            selected_events = selected_events_3pi;
+            selected_channel = "pi+ pi- pi0";
+        } else {
+            selected_events = selected_events_2pi;
+            selected_channel = "pi+ pi-";
+        }
     }
 
     size_t total_events = selected_events.size();
-    std::cout << "Found " << total_events
-              << " events with pi+, pi-, pi0 as direct kaon decay products.\n"
+    std::cout << "Channel counts from Ntuple2:"
+              << "  pi+pi-=" << selected_events_2pi.size()
+              << "  pi+pi-pi0=" << selected_events_3pi.size() << "\n"
+              << "Selected channel: " << selected_channel << "\n"
+              << "Found " << total_events
+              << " candidate events for selected channel.\n"
               << "Processing " << total_events << " selected events...\n";
 
     std::unordered_set<int> selected_event_set(
         selected_events.begin(), selected_events.end());
+
+    const bool is_two_pion_mode = (selected_channel == "pi+ pi-");
+    const double cos_opening_max = is_two_pion_mode ? 0.999995 : 0.9998;
 
     // ========================================================================
     // STEP 2: SET UP Ntuple3
@@ -791,9 +830,10 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         // (|v1 x v2|^2) becomes tiny, giving an unreliable vertex and an
         // incoherent decay time.  Reject events where the opening angle is
         // less than ~1 degree (cos_opening > 0.9998 ~ cos(1.1 deg)).
+        // For KS 2-pion mode, allow much tighter opening angles.
         // ----------------------------------------------------------------
         double cos_opening = fit_pip.dir.Dot(fit_pim.dir);
-        if (cos_opening > 0.9998) continue;
+        if (cos_opening > cos_opening_max) continue;
 
         // ----------------------------------------------------------------
         // TRACK EVALUATION HELPER
@@ -886,7 +926,7 @@ void KLong_save_vectors(const char* filename = "Scenario3_Seed1.root") {
         // [TO CHANGE] Update kaon_prod if kaon not produced at origin.
         // [TO CHANGE] m_K = K_L mass. Use 0.493677 GeV/c^2 for K+/K-.
         // ----------------------------------------------------------------
-        TVector3 kaon_prod(0., 0., 0.);
+        TVector3 kaon_prod(0., 0., ks_z0);
         double flight_cm = (decay_vertex - kaon_prod).Mag();
         double kaon_v    = (flight_cm * 1e-2) / kaon_decay_time;
 

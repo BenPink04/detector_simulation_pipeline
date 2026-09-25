@@ -24,11 +24,14 @@ struct DetectorLayout {
     std::vector<double> pizzas;    // P1-P2
     std::vector<double> fris;      // F1-F2
     double end_detector;            // E1
+    double z0;                      // Tungsten foil / KS start position
 };
 
 // Parse configuration string to extract detector positions
 DetectorLayout parseConfigString(const std::string& config) {
     DetectorLayout layout;
+    layout.end_detector = 0.0;
+    layout.z0 = -1.0;
     
     // Parse format: T1-240_T2-250_T3-680_T4-690_P1-215_P2-230_F1-260_F2-270_E1-700
     std::istringstream ss(config);
@@ -55,42 +58,41 @@ DetectorLayout parseConfigString(const std::string& config) {
             layout.fris.push_back(position);
         } else if (detector_type[0] == 'E') {
             layout.end_detector = position;
+        } else if (detector_type == "Z0") {
+            layout.z0 = position;
         }
     }
     
     return layout;
 }
 
-// Extract T1 position from a config label string (e.g. "T1-360_T2-370_..." -> 360)
-int extractT1(const std::string& config) {
-    size_t pos = config.find("T1-");
+// Extract Z0 position from a config label string (e.g. "KS_Z0-300_T1-..." -> 300)
+int extractZ0(const std::string& config) {
+    size_t pos = config.find("Z0-");
     if (pos == std::string::npos) return 0;
     size_t end = config.find('_', pos + 3);
     std::string val = config.substr(pos + 3, end == std::string::npos ? std::string::npos : end - (pos + 3));
     return std::stoi(val);
 }
 
-// Assign a color by interpolating in RGB between five anchor T1 positions.
-// T1-360 -> kMagenta, T1-400 -> kCyan+2, T1-440 -> kOrange+2 (consistent
-// with previous 7-config run).  Configs outside this range are extrapolated
-// along the same gradient.
-int getConfigColor(int t1_val) {
-    struct Anchor { int t1; float r, g, b; };
+// Assign color by interpolating in RGB along the Z0 scan.
+int getConfigColor(int z0_val) {
+    struct Anchor { int z0; float r, g, b; };
     const Anchor anchors[] = {
-        {240,  63,  63, 255},   // blue-violet for T1-240
-        {360, 255,   0, 255},   // kMagenta    for T1-360
-        {400,   0, 196, 196},   // kCyan+2     for T1-400
-        {440, 255, 140,   0},   // kOrange+2   for T1-440
-        {480, 148,   0, 211},   // violet      for T1-480
+        {200,  63,  63, 255},
+        {250,   0, 170, 255},
+        {300,   0, 196, 196},
+        {350, 255, 140,   0},
+        {400, 220,  20,  60},
     };
     const int nAnchors = 5;
-    if (t1_val <= anchors[0].t1)
+    if (z0_val <= anchors[0].z0)
         return TColor::GetColor(anchors[0].r/255.f, anchors[0].g/255.f, anchors[0].b/255.f);
-    if (t1_val >= anchors[nAnchors-1].t1)
+    if (z0_val >= anchors[nAnchors-1].z0)
         return TColor::GetColor(anchors[nAnchors-1].r/255.f, anchors[nAnchors-1].g/255.f, anchors[nAnchors-1].b/255.f);
     for (int i = 0; i < nAnchors - 1; ++i) {
-        if (t1_val >= anchors[i].t1 && t1_val <= anchors[i+1].t1) {
-            float frac = float(t1_val - anchors[i].t1) / float(anchors[i+1].t1 - anchors[i].t1);
+        if (z0_val >= anchors[i].z0 && z0_val <= anchors[i+1].z0) {
+            float frac = float(z0_val - anchors[i].z0) / float(anchors[i+1].z0 - anchors[i].z0);
             float r = anchors[i].r + frac * (anchors[i+1].r - anchors[i].r);
             float g = anchors[i].g + frac * (anchors[i+1].g - anchors[i].g);
             float b = anchors[i].b + frac * (anchors[i+1].b - anchors[i].b);
@@ -151,6 +153,12 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
         indicator->SetLineColor(line_colors[i]);
         indicator->SetLineWidth(4);
         indicator->Draw();
+
+        int z0_val = extractZ0(config_labels[i]);
+        TText *z0_label = new TText(0.085, y_center, Form("Z0=%d", z0_val));
+        z0_label->SetTextAlign(12);
+        z0_label->SetTextSize(0.022);
+        z0_label->Draw();
         
         // Draw detector components
         double x_scale = 0.80;
@@ -189,6 +197,7 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
         box->SetFillColor(kGreen);
         box->SetLineColor(kGreen);
         box->Draw();
+
     }
     
     // Add legend for detector types at bottom
@@ -227,11 +236,12 @@ void drawDetectorLayout(const std::vector<std::string>& config_labels,
     TText *e_text = new TText(legend_x_start + 3*legend_spacing + 0.03, legend_y + 0.015, "ToF");
     e_text->SetTextSize(0.03);
     e_text->Draw();
+
 }
 
 void KLong_plot_compare_acceptance_truncated() {
     // Find combined acceptance files using system find command
-    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/ARCHIVED_RESULTS/TGRAPH_TEST_20260316 -name '*combined_acceptance.root' 2>/dev/null | sort";
+    std::string findCmd = "find /users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS -name 'KS_Z0-*combined_acceptance.root' 2>/dev/null | sort";
     FILE* pipe = popen(findCmd.c_str(), "r");
     if (!pipe) {
         std::cerr << "Error: Could not run find command" << std::endl;
@@ -250,8 +260,16 @@ void KLong_plot_compare_acceptance_truncated() {
     }
     pclose(pipe);
     
-    // Sort filenames for consistent ordering
-    std::sort(filenames.begin(), filenames.end());
+    // Sort filenames by Z0 for consistent scan ordering
+    std::sort(filenames.begin(), filenames.end(), [](const std::string& a, const std::string& b) {
+        auto get_z0 = [](const std::string& s) {
+            size_t p = s.find("Z0-");
+            if (p == std::string::npos) return 0;
+            size_t e = s.find('_', p + 3);
+            return std::stoi(s.substr(p + 3, e == std::string::npos ? std::string::npos : e - (p + 3)));
+        };
+        return get_z0(a) < get_z0(b);
+    });
     
     std::cout << "Found " << filenames.size() << " combined acceptance files:" << std::endl;
     for (const auto& f : filenames) {
@@ -375,12 +393,13 @@ void KLong_plot_compare_acceptance_truncated() {
             } else {
                 acceptance = 0.0; // No vertices in this bin
             }
+        
             
             h_acceptance->SetBinContent(bin + 1, acceptance);
         }
         
         // Style the histogram as a line graph
-        int color = getConfigColor(extractT1(config_label));
+        int color = getConfigColor(extractZ0(config_label));
         h_acceptance->SetLineColor(color);
         h_acceptance->SetLineWidth(3);
         h_acceptance->SetMarkerColor(color);
@@ -411,8 +430,9 @@ void KLong_plot_compare_acceptance_truncated() {
     // Set up the first histogram
     h_acceptance_vec[0]->SetTitle("Kaon Reconstruction Acceptance Comparison");
     h_acceptance_vec[0]->GetXaxis()->SetRangeUser(1.0, 4.0);
-    h_acceptance_vec[0]->SetMinimum(0.013);
-    h_acceptance_vec[0]->SetMaximum(0.023);
+    h_acceptance_vec[0]->SetMinimum(0.0);
+    double y_max = (max_acceptance > 0.0) ? (max_acceptance * 1.10) : 1.0;
+    h_acceptance_vec[0]->SetMaximum(y_max);
     h_acceptance_vec[0]->Draw("HIST L"); // Draw as histogram line
     
     // Draw additional histograms
