@@ -31,6 +31,9 @@ F1=$7  # FRI wall 1 position
 F2=$8  # FRI wall 2 position
 E1=$9  # TOF wall (End detector) position
 
+# user filesystem
+USER_DIR="/users/ee772"
+
 # Geometry validation
 DIPOLE_END=200  # Dipole magnet ends at z=200cm
 MIN_DETECTOR_POS=210  # Minimum safe detector position
@@ -70,21 +73,21 @@ echo "FRI positions (cm): F1=$F1, F2=$F2"
 echo "TOF position (cm): E1=$E1"
 
 # Set paths
-BASE_SCENARIO_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/BASE_SCENARIO_DIR"
-SCENARIO_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RUNNING/${CONFIG_STR}"
+BASE_SCENARIO_DIR="${USER_DIR}/scratch/VIKING_FOLDER/SIMULATION_RUNNING/BASE_SCENARIO_DIR"
+SCENARIO_DIR="${USER_DIR}/scratch/VIKING_FOLDER/SIMULATION_RUNNING/${CONFIG_STR}"
 DETECTOR_FILE="${BASE_SCENARIO_DIR}/src/JLabKDetectorConstruction.cc"
 BACKUP_FILE="${DETECTOR_FILE}.backup"
-RESULTS_DIR="/users/bp969/scratch/VIKING_FOLDER/SIMULATION_RESULTS/${CONFIG_STR}"
-PARSING_DIR="/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/${CONFIG_STR}_DATA_READ"
+RESULTS_DIR="${USER_DIR}/scratch/VIKING_FOLDER/SIMULATION_RESULTS/${CONFIG_STR}"
+PARSING_DIR="${USER_DIR}/scratch/VIKING_FOLDER/DATA_PARSING/${CONFIG_STR}_DATA_READ"
 
 # Create organized log directories and temp jobs directory
-LOG_BASE_DIR="/users/bp969/scratch/JOB_LOGS/${CONFIG_STR}"
+LOG_BASE_DIR="${USER_DIR}/scratch/JOB_LOGS/${CONFIG_STR}"
 mkdir -p "${LOG_BASE_DIR}/build"
 mkdir -p "${LOG_BASE_DIR}/simulation"  
 mkdir -p "${LOG_BASE_DIR}/parsing"
 mkdir -p "${LOG_BASE_DIR}/combination"
 mkdir -p "${LOG_BASE_DIR}/histograms"
-mkdir -p "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs"
+mkdir -p "${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs"
 echo "Created log directories in ${LOG_BASE_DIR}"
 
 # Create simulation directory for this configuration
@@ -103,13 +106,13 @@ fi
 # Create results directories
 mkdir -p "$RESULTS_DIR"
 mkdir -p "$PARSING_DIR"
-mkdir -p "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs"
+mkdir -p "${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs"
 
 # Copy ROOT parsing scripts and DIAG event parser to configuration-specific parsing directory
 echo "Copying ROOT parsing scripts to $PARSING_DIR"
-cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_momentum_acceptance.C" "$PARSING_DIR/"
-cp "/users/bp969/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_vectors.C" "$PARSING_DIR/"
-cp "/users/bp969/scratch/VIKING_FOLDER/HISTOGRAM_MAKING/parse_diag_events.py" "$PARSING_DIR/"
+cp "${USER_DIR}/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_momentum_acceptance.C" "$PARSING_DIR/"
+cp "${USER_DIR}/scratch/VIKING_FOLDER/DATA_PARSING/KLong_save_vectors.C" "$PARSING_DIR/"
+cp "${USER_DIR}/scratch/VIKING_FOLDER/HISTOGRAM_MAKING/parse_diag_events.py" "$PARSING_DIR/"
 echo "Copied parse_diag_events.py to $PARSING_DIR"
 
 # Update detector file path to use configuration-specific directory
@@ -223,7 +226,7 @@ echo "=== Step 3: Creating build and run jobscripts (100 builds sequential, 100 
 create_build_jobscript() {
     local run_num=$1
     
-    local jobscript="/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_${run_num}_${CONFIG_STR}.job"
+    local jobscript="${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_${run_num}_${CONFIG_STR}.job"
     
     cat > "$jobscript" << EOF
 #!/usr/bin/env bash
@@ -284,7 +287,7 @@ EOF
 create_run_jobscript() {
     local run_num=$1
     
-    local jobscript="/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_${run_num}_${CONFIG_STR}.job"
+    local jobscript="${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_${run_num}_${CONFIG_STR}.job"
     
     cat > "$jobscript" << EOF
 #!/usr/bin/env bash
@@ -371,7 +374,7 @@ done
 create_parsing_jobscript() {
     local file_num=$1
     
-    local jobscript="/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_${file_num}_${CONFIG_STR}.job"
+    local jobscript="${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_${file_num}_${CONFIG_STR}.job"
     
     cat > "$jobscript" << EOF
 #!/usr/bin/env bash
@@ -471,7 +474,7 @@ done
 
 echo "=== Step 5: Creating combination jobscript ==="
 
-cat > "/users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job" << EOF
+cat > "${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job" << EOF
 #!/usr/bin/env bash
 #SBATCH --job-name=Combine_${CONFIG_STR}
 #SBATCH --partition=nodes
@@ -609,18 +612,18 @@ if [ "$CLEANUP_ON_SUCCESS" = true ]; then
 
     # Cleanup build job logs and error files
     echo "Cleaning up build job logs..."
-    find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Build_${CONFIG_STR}_*.log" -delete || true
-    find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Build_${CONFIG_STR}_*.err" -delete || true
+    find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Build_${CONFIG_STR}_*.log" -delete || true
+    find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Build_${CONFIG_STR}_*.err" -delete || true
 
     # Cleanup run job logs and error files
     echo "Cleaning up run job logs..."
-    find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Run_${CONFIG_STR}_*.log" -delete || true
-    find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Run_${CONFIG_STR}_*.err" -delete || true
+    find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Run_${CONFIG_STR}_*.log" -delete || true
+    find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Run_${CONFIG_STR}_*.err" -delete || true
 
     # Cleanup parsing job logs
     echo "Cleaning up parsing job logs..."
-    find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Parse_${CONFIG_STR}_G*.log" -delete || true
-    find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Parse_${CONFIG_STR}_G*.err" -delete || true
+    find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Parse_${CONFIG_STR}_G*.log" -delete || true
+    find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Parse_${CONFIG_STR}_G*.err" -delete || true
 else
     echo "CLEANUP_ON_SUCCESS=false: keeping individual run outputs and logs"
 fi
@@ -631,20 +634,20 @@ echo "Combined vectors file: ${RESULTS_DIR}/${CONFIG_STR}_combined_vectors.root"
 
 # Cleanup combine job logs
 echo "Cleaning up combine job logs..."
-find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Combine_${CONFIG_STR}*.log" -delete || true
-find /users/bp969/scratch/JOBSCRIPTS_TESTS -name "Combine_${CONFIG_STR}*.err" -delete || true
+find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Combine_${CONFIG_STR}*.log" -delete || true
+find ${USER_DIR}/scratch/JOBSCRIPTS_TESTS -name "Combine_${CONFIG_STR}*.err" -delete || true
 
 # Remove temporary job scripts
 echo "Removing temporary job scripts for ${CONFIG_STR}..."
-rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_*_${CONFIG_STR}.job || true
-rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_*_${CONFIG_STR}.job || true
-rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_*_${CONFIG_STR}.job || true
-rm -f /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job || true
+rm -f ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_*_${CONFIG_STR}.job || true
+rm -f ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_*_${CONFIG_STR}.job || true
+rm -f ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_*_${CONFIG_STR}.job || true
+rm -f ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job || true
 EOF
 
 echo "=== Step 6: Creating master job submission script ==="
 
-cat > "/users/bp969/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh" << EOF
+cat > "${USER_DIR}/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh" << EOF
 #!/bin/bash
 
 # Master job submission script for configuration: ${CONFIG_STR}
@@ -661,18 +664,18 @@ PREV_BUILD_ID=""
 for run in \$(seq 1 100); do
     if [ -z "\$PREV_BUILD_ID" ]; then
         # First build has no dependency
-        BUILD_ID=\$(sbatch /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_\${run}_${CONFIG_STR}.job | awk '{print \$4}')
+        BUILD_ID=\$(sbatch ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_\${run}_${CONFIG_STR}.job | awk '{print \$4}')
         echo "Submitted build \$run: Job ID \$BUILD_ID (no dependency)"
     else
         # Subsequent builds depend on previous build completion
-        BUILD_ID=\$(sbatch --dependency=afterok:\$PREV_BUILD_ID /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_\${run}_${CONFIG_STR}.job | awk '{print \$4}')
+        BUILD_ID=\$(sbatch --dependency=afterok:\$PREV_BUILD_ID ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/build_\${run}_${CONFIG_STR}.job | awk '{print \$4}')
         [ \$((\$run % 10)) -eq 0 ] && echo "Submitted builds \$((\$run-9))-\$run (last: \$BUILD_ID)"
     fi
     BUILD_JOB_IDS+=(\$BUILD_ID)
     PREV_BUILD_ID=\$BUILD_ID
     
     # Submit corresponding run job (depends only on its own build completing)
-    RUN_ID=\$(sbatch --dependency=afterok:\$BUILD_ID /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_\${run}_${CONFIG_STR}.job | awk '{print \$4}')
+    RUN_ID=\$(sbatch --dependency=afterok:\$BUILD_ID ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/run_\${run}_${CONFIG_STR}.job | awk '{print \$4}')
     
     # Store run job ID for later dependency
     if [ \$run -eq 1 ]; then
@@ -692,7 +695,7 @@ RUN_DEPENDENCY=\$(IFS=:; echo "\${RUN_JOB_IDS[*]}")
 echo "Submitting parsing jobs (dependent on all run jobs)..."
 PARSE_JOB_IDS=()
 for file_num in \$(seq 1 100); do
-    JOB_ID=\$(sbatch --dependency=afterok:\$RUN_DEPENDENCY /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_\${file_num}_${CONFIG_STR}.job | awk '{print \$4}')
+    JOB_ID=\$(sbatch --dependency=afterok:\$RUN_DEPENDENCY ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/parse_file_\${file_num}_${CONFIG_STR}.job | awk '{print \$4}')
     PARSE_JOB_IDS+=(\$JOB_ID)
     echo "Submitted parsing file \$file_num: Job ID \$JOB_ID"
 done
@@ -702,7 +705,7 @@ PARSE_DEPENDENCY=\$(IFS=:; echo "\${PARSE_JOB_IDS[*]}")
 
 # Submit combination job with dependency on parsing jobs
 echo "Submitting combination job (dependent on parsing jobs)..."
-COMBINE_JOB_ID=\$(sbatch --dependency=afterok:\$PARSE_DEPENDENCY /users/bp969/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job | awk '{print \$4}')
+COMBINE_JOB_ID=\$(sbatch --dependency=afterok:\$PARSE_DEPENDENCY ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job | awk '{print \$4}')
 echo "Submitted combination job: Job ID \$COMBINE_JOB_ID"
 
 echo
@@ -728,7 +731,7 @@ rm -f "\$0"
 echo "   Submission script deleted successfully."
 EOF
 
-chmod +x "/users/bp969/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
+chmod +x "${USER_DIR}/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
 
 echo
 echo "=== FIXED Setup completed successfully! ==="
@@ -744,7 +747,7 @@ echo "  ✓ Added verification output to confirm position updates"
 echo "  ✓ Template now starts with correct baseline positions"
 echo
 echo "To start the FIXED simulation pipeline, run:"
-echo "  /users/bp969/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
+echo "  ${USER_DIR}/scratch/JOBSCRIPTS_TESTS/submit_${CONFIG_STR}.sh"
 echo
 echo "This will:"
 echo "  1. Submit 100 build jobs sequentially (each edits source, rebuilds, creates unique executable)"
