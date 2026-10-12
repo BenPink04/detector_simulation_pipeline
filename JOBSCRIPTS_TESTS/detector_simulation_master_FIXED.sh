@@ -211,7 +211,8 @@ cat > "${SCENARIO_DIR}/batch.mac" << 'EOF'
 
 # Run simulation with specified number of events (10M total = 100 jobs × 100000 events)
 # 6000 kaon events per second so 25M takes ~70 minutes beamtime in real pipeline
-/run/beamOn 100000
+#/run/beamOn 100000
+/run/beamOn 1000
 EOF
 
 echo "Created batch.mac for headless simulation"
@@ -238,7 +239,7 @@ create_build_jobscript() {
 #SBATCH --mem=2G
 #SBATCH --account=pet-hadron-2019
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=bp969@york.ac.uk
+#SBATCH --mail-user=ee772@york.ac.uk
 #SBATCH --output=${LOG_BASE_DIR}/build/Build_${CONFIG_STR}_${run_num}_%j.log
 #SBATCH --error=${LOG_BASE_DIR}/build/Build_${CONFIG_STR}_${run_num}_%j.err
 
@@ -299,7 +300,7 @@ create_run_jobscript() {
 #SBATCH --mem=4G
 #SBATCH --account=pet-hadron-2019
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=bp969@york.ac.uk
+#SBATCH --mail-user=ee772@york.ac.uk
 #SBATCH --output=${LOG_BASE_DIR}/simulation/Run_${CONFIG_STR}_${run_num}_%j.log
 #SBATCH --error=${LOG_BASE_DIR}/simulation/Run_${CONFIG_STR}_${run_num}_%j.err
 
@@ -386,7 +387,7 @@ create_parsing_jobscript() {
 #SBATCH --mem=4G
 #SBATCH --account=pet-hadron-2019
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=bp969@york.ac.uk
+#SBATCH --mail-user=ee772@york.ac.uk
 #SBATCH --output=${LOG_BASE_DIR}/parsing/Parse_${CONFIG_STR}_F${file_num}_%j.log
 #SBATCH --error=${LOG_BASE_DIR}/parsing/Parse_${CONFIG_STR}_F${file_num}_%j.err
 
@@ -484,7 +485,7 @@ cat > "${USER_DIR}/scratch/JOBSCRIPTS_TESTS/temp_jobs/combine_${CONFIG_STR}.job"
 #SBATCH --mem=4G
 #SBATCH --account=pet-hadron-2019
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=bp969@york.ac.uk
+#SBATCH --mail-user=ee772@york.ac.uk
 #SBATCH --output=${LOG_BASE_DIR}/combination/Combine_${CONFIG_STR}_%j.log
 #SBATCH --error=${LOG_BASE_DIR}/combination/Combine_${CONFIG_STR}_%j.err
 
